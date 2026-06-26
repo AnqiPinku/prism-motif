@@ -1,0 +1,5 @@
+config/secrets.json
+data/threads/
+data/memory/
+__pycache__/
+*.pyc
