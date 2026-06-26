@@ -1,0 +1,31 @@
+{
+  "default": "deepseek",
+  "providers": {
+    "deepseek": {
+      "base_url": "https://api.deepseek.com",
+      "model": "deepseek-chat",
+      "api_key_env": "DEEPSEEK_API_KEY"
+    },
+    "qwen": {
+      "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+      "model": "qwen-plus",
+      "api_key_env": "DASHSCOPE_API_KEY"
+    },
+    "openai": {
+      "base_url": "https://api.openai.com/v1",
+      "model": "gpt-4o",
+      "api_key_env": "OPENAI_API_KEY"
+    },
+    "local": {
+      "base_url": "http://localhost:11434/v1",
+      "model": "qwen2.5",
+      "api_key_env": "NONE"
+    },
+    "mock": {
+      "type": "mock",
+      "model": "mock",
+      "base_url": "",
+      "api_key_env": "NONE"
+    }
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "servers": [
+    {
+      "name": "reaper",
+      "enabled": false,
+      "command": "python",
+      "args": [
+        "A:/科广/reaper-mcp/server/reaper_mcp_server.py"
+      ]
+    },
+    {
+      "name": "system",
+      "enabled": false,
+      "command": "python",
+      "args": [
+        "A:/科广/system-mcp/server.py"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,6 @@
+{
+  "max_steps": 64,
+  "request_timeout_s": 120,
+  "base_prompt": "",
+  "workspace": "default"
+}
