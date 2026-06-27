@@ -1,10 +1,12 @@
 # AGENTS.md — Prism Core 施工规范（给开发 agent 读）
 
-你被指派实现 Prism Core 的一部分。先读本文件，再读 `DESIGN.md`。**严格遵守下面的契约和铁律**——契约是多人/多 agent 协作的唯一对接点，不要擅自改动签名。
+Prism Core 是一个**干净的原型/种子**：多个领域 agent 都从它**起步**，起步之后该改核心就改核心，不必保持不变。下面这些"约定"是为了让**种子**保持干净、一致、好合并上游——**开发核心（prism-core 本身）时尽量守住；分叉出去的领域 agent 可以按需打破，自负合并成本**。先读本文件，再读 `DESIGN.md`。
+
+> 仓库模型：`prism-core` = 干净种子。开领域 agent = `git clone` 它当起点（把 prism-core 设为 `upstream`），自由加技能/config/harness、也可改核心；想要核心后来的改进就偶尔 `git merge upstream`。详见 HANDOFF。
 
 ---
 
-## 0. 铁律（违反即返工）
+## 0. 种子原则（开发核心时守，分叉可酌情打破）
 
 1. **语言 Python ≥ 3.10。零依赖**：只用标准库（`urllib`/`subprocess`/`json`/`sqlite3`/`http.server`/`dataclasses`/`pathlib`/`argparse`）。**禁止 pip 安装任何包**，禁止 `requirements.txt`。
 2. **配置用 JSON**（不用 YAML）。技能文件用 markdown + 极简 frontmatter（见 §3）。
@@ -31,7 +33,7 @@ config/*.json (T0, 随时可写)
 
 ---
 
-## 2. 冻结契约（不可改签名）
+## 2. 核心数据模型 / 约定（改前想清楚；分叉的领域 agent 可打破，自负合并成本）
 
 ### 2.1 `core/contracts.py`（T1 实现，全员依赖）
 用 `@dataclass`：

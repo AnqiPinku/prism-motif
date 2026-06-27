@@ -18,6 +18,8 @@
 | `A:\科广\reaper-mcp\` | REAPER 的 MCP server（Lua 桥 + Python server，20 工具） | **零依赖** |
 | `A:\科广\system-mcp\` | 电脑操作 MCP server（11 工具） | **零依赖** |
 
+**仓库模型（重要定位）**：`prism-core` 是一个**干净的原型/种子**，不是要冻结的对外库。开一个**领域 agent**（如 music-agent）= `git clone prism-core` 当起点 → 把 prism-core 设为 `upstream` 远端 → 在里面自由加 技能/config/harness（如 audio 自听 Reflexion）、**也可以改核心**；想要核心后来的改进就偶尔 `git merge upstream`，反过来通用改进可回流到种子。**MCP（reaper/system/audio…）各自独立仓、跨 agent 复用**。多 agent 不靠"依赖+钉版本"，靠"从种子分叉 + 上游合并"。
+
 ## 3. 已完成（M1 内核 + 完整前端 + 电脑操作能力，均已实测）
 
 **core/**（`A:\科广\prism-core\core\`）
