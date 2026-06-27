@@ -5,9 +5,10 @@ from .contracts import ToolResult
 
 
 class ToolHub:
-    def __init__(self, servers):
+    def __init__(self, servers, tool_timeout=60):
         # servers: list[dict] {name, command, args, env?}
         self._servers = servers
+        self._tool_timeout = tool_timeout    # 每个 MCP 调用的超时（秒）
         self._clients = []
         self._index = {}    # 暴露名 -> (client, 原始工具名)
         self._specs = []
@@ -15,7 +16,8 @@ class ToolHub:
     def start(self):
         """启动所有 MCP server 并发现工具。"""
         for s in self._servers:
-            client = MCPClient(s["command"], s.get("args", []), s.get("env"))
+            client = MCPClient(s["command"], s.get("args", []), s.get("env"),
+                               timeout=self._tool_timeout)
             client.start()
             self._clients.append(client)
             for spec in client.list_tools():

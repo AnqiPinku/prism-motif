@@ -1,6 +1,8 @@
 """默认模型后端：打 OpenAI 兼容的 /chat/completions（只用标准库 urllib）。
 改 base_url + model + api_key 即可换成 DeepSeek / Qwen / OpenAI / 本地 Ollama 等。"""
 import json
+import time
+import random
 import urllib.request
 import urllib.error
 
@@ -18,6 +20,9 @@ class OpenAICompatReasoner(Reasoner):
         self.timeout = timeout
         self.last_prompt_tokens = None        # 最近一次请求的 prompt token 数（来自 API usage）
         self.last_completion_tokens = None
+        self.max_attempts = 3                 # 瞬时错误重试总次数（含首次）
+        self.retry_base_delay = 1.0           # 指数退避基数（秒）
+        self.on_retry = None                  # 可选回调 (attempt, max, why)：流式上报"重试中"
 
     def _capture_usage(self, usage):
         """从响应 usage 记录 prompt/completion token 数（供上下文占用环 / 压缩触发用）。"""
@@ -74,13 +79,7 @@ class OpenAICompatReasoner(Reasoner):
             headers["Authorization"] = "Bearer " + self.api_key
         req = urllib.request.Request(self.base_url + "/chat/completions",
                                      data=body, headers=headers, method="POST")
-        try:
-            resp = urllib.request.urlopen(req, timeout=self.timeout)
-        except urllib.error.HTTPError as e:
-            detail = e.read().decode("utf-8", "replace")
-            raise RuntimeError("LLM HTTP %s: %s" % (e.code, detail)) from None
-        except urllib.error.URLError as e:
-            raise RuntimeError("连接 LLM 失败: %s" % (e.reason,)) from None
+        resp = self._open(req)        # 重试只作用于"建连"；开始读流后不再重试，避免重复吐字
 
         text_acc = ""
         tool_acc = {}
@@ -145,6 +144,31 @@ class OpenAICompatReasoner(Reasoner):
     def _as_text(content):
         return content if isinstance(content, str) else json.dumps(content, ensure_ascii=False)
 
+    _RETRYABLE = (408, 409, 429, 500, 502, 503, 504)
+
+    def _open(self, req):
+        """带重试+指数退避地建立连接；只对 429/5xx/网络/超时 重试。返回 response 或抛 RuntimeError。"""
+        for attempt in range(1, self.max_attempts + 1):
+            try:
+                return urllib.request.urlopen(req, timeout=self.timeout)
+            except urllib.error.HTTPError as e:
+                try:
+                    if e.code not in self._RETRYABLE or attempt == self.max_attempts:
+                        detail = e.read().decode("utf-8", "replace")
+                        raise RuntimeError("LLM HTTP %s: %s" % (e.code, detail)) from None
+                    why = "HTTP %s" % e.code
+                finally:
+                    e.close()         # 释放失败响应的连接（含可重试分支），不留悬挂 socket
+            except (urllib.error.URLError, TimeoutError, OSError) as e:
+                if attempt == self.max_attempts:
+                    raise RuntimeError("连接 LLM 失败: %s" % (getattr(e, "reason", e),)) from None
+                why = str(getattr(e, "reason", e))
+            if self.on_retry:
+                self.on_retry(attempt, self.max_attempts, why)
+            delay = self.retry_base_delay * (2 ** (attempt - 1))
+            time.sleep(delay + random.uniform(0, delay * 0.25))   # 退避 + 抖动
+        raise RuntimeError("LLM 重试耗尽")
+
     def _post(self, path, payload):
         body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
         headers = {"Content-Type": "application/json"}
@@ -152,11 +176,5 @@ class OpenAICompatReasoner(Reasoner):
             headers["Authorization"] = "Bearer " + self.api_key
         req = urllib.request.Request(self.base_url + path, data=body,
                                      headers=headers, method="POST")
-        try:
-            with urllib.request.urlopen(req, timeout=self.timeout) as resp:
-                return json.loads(resp.read().decode("utf-8"))
-        except urllib.error.HTTPError as e:
-            detail = e.read().decode("utf-8", "replace")
-            raise RuntimeError("LLM HTTP %s: %s" % (e.code, detail)) from None
-        except urllib.error.URLError as e:
-            raise RuntimeError("连接 LLM 失败: %s" % (e.reason,)) from None
+        with self._open(req) as resp:
+            return json.loads(resp.read().decode("utf-8"))

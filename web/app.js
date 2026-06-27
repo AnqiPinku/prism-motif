@@ -288,6 +288,8 @@ function handleEvent(e, asst) {
     renderContextRing(e.prompt_tokens, e.window, e.pct);
   } else if (e.type === "compaction") {
     asst.body.appendChild(el("div", "trace compact", trim(e.content)));
+  } else if (e.type === "retry") {
+    asst.body.appendChild(el("div", "trace retry", trim(e.content)));
   } else if (e.type === "tool_call") {
     asst.body.appendChild(el("div", "trace call", e.name + "(" + fmt(e.arguments) + ")"));
   } else if (e.type === "tool_result") {

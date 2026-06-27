@@ -184,6 +184,87 @@ res2 = _runner._maybe_summarize(big, "go", 100, ctx2, SumMock(),
                                 {"text": res["text"], "upto": res["upto"]}, lambda e: None)
 check("已摘要部分不重复摘要", res2.get("upto") == res["upto"])
 
+print("G. 可靠性：重试/退避 + 工具超时（mock，不需网络）")
+import io
+import queue as _queue
+import urllib.error
+from core.mcp_client import MCPClient
+from core.reasoners.openai_compat import OpenAICompatReasoner
+import core.reasoners.openai_compat as _oc
+
+
+class _FakeStdin:
+    def write(self, x):
+        pass
+
+    def flush(self):
+        pass
+
+
+# 工具超时：队列无响应 → _rpc 超时 → call_tool 包成 is_error，不阻塞循环
+mc = MCPClient("x", [], timeout=0.2)
+mc.proc = type("P", (), {"stdin": _FakeStdin()})()
+mc._q = _queue.Queue()
+r_to = mc.call_tool("foo", {})
+check("工具超时→is_error（不挂死）", r_to.is_error and "超时" in r_to.content)
+# 进程退出哨兵
+mc2 = MCPClient("x", [], timeout=2)
+mc2.proc = type("P", (), {"stdin": _FakeStdin()})()
+mc2._q = _queue.Queue()
+mc2._q.put("")
+r_ex = mc2.call_tool("bar", {})
+check("MCP 退出→is_error", r_ex.is_error and "退出" in r_ex.content)
+
+
+class _Resp:
+    def __init__(self, body):
+        self._b = body
+
+    def read(self):
+        return self._b.encode("utf-8")
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+
+_st = {"n": 0}
+
+
+def _fake_urlopen(req, timeout=None):
+    _st["n"] += 1
+    if _st["n"] < 3:
+        raise urllib.error.URLError("boom")
+    return _Resp('{"choices":[{"message":{"content":"ok"}}],"usage":{"prompt_tokens":7}}')
+
+
+_orig = _oc.urllib.request.urlopen
+_oc.urllib.request.urlopen = _fake_urlopen
+try:
+    rr = OpenAICompatReasoner("http://x", "m", "k")
+    rr.max_attempts = 3
+    rr.retry_base_delay = 0
+    d_ok = rr.decide([Message(role="user", content="hi")], [])
+    check("瞬时错误重试后成功", d_ok.kind == "final" and d_ok.text == "ok")
+    check("重试到第3次才成功", _st["n"] == 3)
+    check("重试路径也捕获 usage", rr.last_prompt_tokens == 7)
+    _st["n"] = 0
+
+    def _fake_400(req, timeout=None):
+        _st["n"] += 1
+        raise urllib.error.HTTPError("u", 400, "bad", {}, io.BytesIO(b"bad"))
+
+    _oc.urllib.request.urlopen = _fake_400
+    try:
+        rr.decide([Message(role="user", content="hi")], [])
+        check("400 应立即抛", False)
+    except RuntimeError:
+        check("400 不重试、立即抛", _st["n"] == 1)
+finally:
+    _oc.urllib.request.urlopen = _orig
+
 print("C. MCP 客户端连通（真 reaper-mcp，不需 REAPER 打开）")
 server = "A:/科广/reaper-mcp/server/reaper_mcp_server.py"
 if os.path.exists(server):
