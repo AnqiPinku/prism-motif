@@ -147,6 +147,43 @@ CompactingReasoner(NoUsage(), window_tokens=1000,
 check("无 usage 时用估算上报占用", any(e.get("type") == "context" and e.get("prompt_tokens") > 0
                                       for e in nevs))
 
+print("F. 上下文压缩 Phase 2（摘要压实，mock；不需 key）")
+from core.compaction import recent_cut, summarize_messages
+from core import runner as _runner
+
+rc = [Message(role="user", content="u1"), Message(role="assistant", content="a"),
+      Message(role="user", content="u2"), Message(role="user", content="u3"),
+      Message(role="user", content="u4"), Message(role="user", content="u5")]
+check("recent_cut 取最近K回合起点", recent_cut(rc, 4) == 2)
+check("recent_cut 短对话返回0", recent_cut([Message(role="user", content="x")], 4) == 0)
+
+
+class SumMock:
+    def __init__(self):
+        self.saw = None
+
+    def decide(self, messages, tools, on_delta=None):
+        self.saw = messages
+        return Decision(kind="final", text="摘要：用户要做X，已决定Y，待办Z")
+
+
+sm = SumMock()
+summ = summarize_messages(sm, "", [Message(role="user", content="做X"),
+                                   Message(role="assistant", content="好的")], on_event=lambda e: None)
+check("summarize 产出摘要文本", "摘要" in summ)
+check("summarize 不带工具(只 system+user)", sm.saw is not None and len(sm.saw) == 2)
+
+ctx2 = {"compact_at": 0.6, "keep_recent_turns": 4, "summarize": True}
+check("小 prior 不摘要",
+      _runner._maybe_summarize([Message(role="user", content="hi")], "go", 1000, ctx2, SumMock(),
+                               None, lambda e: None) is None)
+big = [Message(role="user", content="x" * 300) for _ in range(8)]
+res = _runner._maybe_summarize(big, "go", 100, ctx2, SumMock(), None, lambda e: None)
+check("大 prior 产出摘要(text+upto)", bool(res) and res.get("text") and res.get("upto") == recent_cut(big, 4))
+res2 = _runner._maybe_summarize(big, "go", 100, ctx2, SumMock(),
+                                {"text": res["text"], "upto": res["upto"]}, lambda e: None)
+check("已摘要部分不重复摘要", res2.get("upto") == res["upto"])
+
 print("C. MCP 客户端连通（真 reaper-mcp，不需 REAPER 打开）")
 server = "A:/科广/reaper-mcp/server/reaper_mcp_server.py"
 if os.path.exists(server):

@@ -59,13 +59,15 @@
 - `gateway/server.py`：`/api/workspaces`、`/api/workspace/{switch,create,rename,delete}`，`/api/state` 带 workspace。
 - `web/`：左栏顶部工作区块（下拉切换 / 新建 / 重命名 / 删除）。
 
-### ▶ 明天从这开始：上下文压缩 Phase 1（方案与调研见 NOTES.md §5）
-现在历史无限 append，长对话**必爆**模型上下文窗口。SOTA 共识=压实历史而非压 token。先做最便宜的一包：
-1. **token 追踪**：`OpenAICompatReasoner` 读响应 `usage.prompt_tokens` 存 `last_prompt_tokens`（加属性，不改契约）；runner 回合前据此判断。
-2. **工具结果消隐**（无 LLM 调用，最划算）：`core/compaction.py` 把超 `elide_over_chars` 的旧工具输出换成占位符、保留 `tool_call` 痕迹。
-3. **上下文占用环**（纯 SVG，topbar 右上）：gateway 每轮发 `{"type":"context",prompt_tokens,window,pct}` → 前端圆环，绿→琥珀→红，到 `compact_at` 自动压实后回落。
-4. config（settings.json，默认开=安全网）：`"context":{"enabled":true,"window_tokens":65536,"compact_at":0.8,"keep_recent_turns":4,"elide_tool_results":true,"elide_over_chars":2000,"summarize":true}`。
-- 随后：② 摘要压实兜底（一次 LLM 调用）→ 自适应触发 / 记忆 MCP。**磁盘线程存全本，压实只作用于"发给模型那份"**（防不可逆丢弃）。
+### ✅ 上下文压缩 Phase 1 + 占用环（已完成；方案见 NOTES.md §5）
+- **token 追踪**：`OpenAICompatReasoner` 读 `usage.prompt_tokens`（流式加 `stream_options`）存 `last_prompt_tokens`。
+- **工具结果消隐**（无 LLM）：`core/compaction.py` 的 `elide_tool_results` 把旧超长工具输出换占位符、留 `tool_call` 痕迹。
+- **压缩透镜** `CompactingReasoner`：包在模型外，每次 decide 前投影成消隐版发给模型、上报占用；**AgentLoop 持有全本、照常存盘**。
+- **占用环**（纯 SVG，底部输入栏，hover 显已用/预算 K/M）：切线程按线程显示、新对话归零。
+- **预算按模型**：`providers.json` 每模型 `window_tokens`（⚙ 滑轨可调，8K–1M 档）；`compact_at` 0.6。
+
+### ▶ 进行中：上下文压缩 Phase 2（摘要压实）
+接近预算时**一次 LLM 调用**把"最近 K 回合之前"的旧历史增量压成摘要（保留决定/事实/未决/偏好），折进 system 发给模型；**磁盘仍存全本**（摘要+upto 存 thread config，不丢历史）。之后：自适应触发 / 记忆 MCP。
 
 ### 成熟度待办（"成熟≠加功能"；详见 NOTES.md §6）
 健壮性：①上下文压缩(上面) ②重试/退避+工具超时 ③服务端真取消+token/步数预算。
