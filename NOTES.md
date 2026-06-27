@@ -55,7 +55,9 @@ Anthropic 告诫：压缩是**不可逆丢弃**，有风险 → 对策"磁盘留
 - **不可逆对策**：磁盘线程存全本，压实只作用于"发给模型那份"。
 - **config**（settings.json，默认开=安全网）：`"context": {"enabled":true,"window_tokens":65536,"compact_at":0.8,"keep_recent_turns":4,"elide_tool_results":true,"elide_over_chars":2000,"summarize":true}`。
 - **UI**：压实发 `{"type":"compaction"}`；每轮发 `{"type":"context",prompt_tokens,window,pct}` → 前端**上下文占用环**（绿→琥珀→红，到阈值自动压实后回落，topbar 右上，纯 SVG）。
-- **分期**：①消隐+token追踪+圆环 →（②摘要兜底）→ 自适应/记忆 MCP 留后。
+- **分期**：✅ Phase 1（消隐+token追踪+圆环+按线程占用）已完成 → ▶ Phase 2（摘要压实，进行中）→ 自适应/记忆 MCP 留后。
+- **预算 = 按模型配（已定）**：CC 默认用模型真实窗口、让用户调小；但 Prism 连任意端点、拿不到可信真实窗口（硬编码会过期，65536 就是教训）。所以 `window_tokens` 当"**质量预算**"，每模型一个（providers.json，⚙ 滑轨 8K–1M 档），默认 128K；圆环分母=预算，`compact_at` 0.6（CC 社区"50-70%提前压"）。这比拿 1M 硬上限当分母有用（否则圈永远贴 0%）。
+- **Phase 2 设计（增量摘要 + 全本存盘）**：接近 `compact_at×预算` 时，把 `prior[upto:recent_cut]`（最近 K 回合之前、上次摘要之后的新内容）连同已有摘要一次 LLM 压成新摘要；摘要折进 system 发给模型，最近 K 回合原文照发。摘要 `{text,upto}` 存进 thread config，**磁盘线程仍存全本**（prior 全量 + 本轮新消息），不丢历史、不每轮重复摘要。
 
 来源：Anthropic「Effective context engineering for AI agents」/ Claude Cookbook（memory/compaction/tool clearing）/ JetBrains「Efficient context management」/ Morph「Compaction vs Summarization」/ microsoft/LLMLingua / Letta「Memory Blocks」。
 

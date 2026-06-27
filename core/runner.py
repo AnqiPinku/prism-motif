@@ -12,7 +12,8 @@ from .skills import enabled_skills
 from .context import build_system_prompt
 from .memory import build_memory
 from .loop import AgentLoop
-from .compaction import CompactingReasoner, estimate_tokens
+from .compaction import (CompactingReasoner, estimate_tokens,
+                         recent_cut, summarize_messages)
 from . import threads as threads_mod
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -171,6 +172,7 @@ def run_turn(goal, provider=None, on_event=None, thread_id=None, permission=None
 
         # 上下文压缩"透镜"：发给模型的消息做工具结果消隐 + 上报占用，磁盘仍存全本（领域无关）。
         ctx = settings.get("context") or {}
+        raw_reasoner = reasoner            # 摘要压实用原始模型（不经透镜，避免递归/重复上报）
         if ctx.get("enabled"):
             reasoner = CompactingReasoner(
                 reasoner,
@@ -187,32 +189,59 @@ def run_turn(goal, provider=None, on_event=None, thread_id=None, permission=None
         base = settings.get("base_prompt", DEFAULT_BASE_PROMPT)
         system_prompt = build_system_prompt(skills, memories, base=base)
 
-        prior = []
+        prior, prev_summary = [], None
         if thread_id:
             try:
                 data = threads_mod.load_thread(str(DATA / "threads"), thread_id)
                 prior = threads_mod.deserialize(data.get("messages", []))
+                prev_summary = (data.get("config") or {}).get("summary")
             except (OSError, ValueError):
                 prior = []
         else:
             thread_id = time.strftime("%Y%m%d-%H%M%S")
 
-        # 系统提示每轮重建；为空则根本不插入 system 消息（纯净，无底座）
-        head = [Message(role="system", content=system_prompt)] if system_prompt else []
-        messages = head + prior + [Message(role="user", content=goal)]
+        # Phase 2：接近预算时把较早历史增量摘要（保留最近 K 回合原文）。磁盘仍存全本。
+        summary = prev_summary
+        if ctx.get("enabled") and ctx.get("summarize"):
+            snap = getattr(raw_reasoner, "last_prompt_tokens", None)   # 摘要不该污染主回合占用
+            try:
+                summary = _maybe_summarize(prior, goal, _provider_window(provider_name),
+                                           ctx, raw_reasoner, prev_summary, on_event)
+            except Exception as e:         # noqa: BLE001 摘要失败不拖垮主流程
+                (on_event or (lambda _e: None))(
+                    {"type": "compaction", "kind": "summarize_error", "content": "摘要出错：%s" % e})
+                summary = prev_summary
+            try:                            # 还原：存档/圆环只反映主回合真实占用，不被摘要调用污染
+                raw_reasoner.last_prompt_tokens = snap
+            except Exception:              # noqa: BLE001
+                pass
+        # 是否"使用"摘要：仅当压缩+摘要开启时用；否则发全本（但 config 仍保留摘要，供重开续用）。
+        use_summary = summary if (ctx.get("enabled") and ctx.get("summarize")) else None
+        upto = int((use_summary or {}).get("upto", 0))
+        prior_tail = prior[upto:]
+
+        # 系统提示每轮重建；把摘要折进 system（保持单条 system、最大兼容）。为空则不插入 system。
+        head_text = system_prompt or ""
+        if use_summary and use_summary.get("text"):
+            head_text = (head_text + "\n\n" if head_text else "") + "【早前对话摘要】\n" + use_summary["text"]
+        head = [Message(role="system", content=head_text)] if head_text else []
+        sent = head + prior_tail + [Message(role="user", content=goal)]
 
         loop = AgentLoop(reasoner, toolhub,
                          max_steps=settings.get("max_steps", 64),
                          on_event=on_event, permission=permission)
-        final = loop.run(messages)
+        final = loop.run(sent)
 
-        # 存档时去掉开头的 system（如果有）
-        convo = messages[1:] if (messages and messages[0].role == "system") else messages
+        # 存档：拼回全本（prior 全量 + 本轮新消息），摘要单独存 config，不丢历史。
+        new_turn = sent[len(head) + len(prior_tail):]
+        full_convo = prior + new_turn
         thread_cfg = {"provider": provider_name}
+        if summary:
+            thread_cfg["summary"] = summary
         pt = getattr(reasoner, "last_prompt_tokens", None)
         if pt is not None:                 # 记录本轮真实占用，供切线程时按线程显示圆环
             thread_cfg["context"] = {"prompt_tokens": pt, "window": _provider_window(provider_name)}
-        threads_mod.save_thread(str(DATA / "threads"), thread_id, thread_cfg, convo)
+        threads_mod.save_thread(str(DATA / "threads"), thread_id, thread_cfg, full_convo)
         return thread_id, final
     finally:
         toolhub.close()
@@ -221,6 +250,24 @@ def run_turn(goal, provider=None, on_event=None, thread_id=None, permission=None
 def run_once(goal, provider=None, on_event=None, thread_id=None):
     """命令行用：跑一轮并返回最终回答（丢弃 thread_id）。"""
     return run_turn(goal, provider=provider, on_event=on_event, thread_id=thread_id)[1]
+
+
+def _maybe_summarize(prior, goal, budget, ctx, summarizer, prev_summary, on_event):
+    """接近 compact_at×预算 时，把 prior 较早部分增量压成摘要（保留最近 keep_recent_turns 回合原文）。
+    返回 {text, upto}（或沿用 prev_summary / None）。磁盘仍存全本，摘要只用于发给模型。"""
+    prev = prev_summary or {}
+    upto = int(prev.get("upto", 0))
+    text = prev.get("text", "")
+    threshold = budget * float(ctx.get("compact_at", 0.6))
+    # 估算"发给模型"的量：摘要 + 未摘要的 prior 尾部 + 本轮 goal
+    sent_est = estimate_tokens(prior[upto:]) + len(text) // 3 + len(goal or "") // 3
+    if sent_est <= threshold:
+        return prev or None
+    cut = recent_cut(prior, int(ctx.get("keep_recent_turns", 4)))
+    if cut <= upto:                        # 最近回合之外已无可折叠的新内容
+        return prev or None
+    new_text = summarize_messages(summarizer, text, prior[upto:cut], on_event)
+    return {"text": new_text, "upto": cut}
 
 
 def thread_context(data):
