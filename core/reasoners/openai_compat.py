@@ -16,6 +16,16 @@ class OpenAICompatReasoner(Reasoner):
         self.model = model
         self.api_key = api_key or ""
         self.timeout = timeout
+        self.last_prompt_tokens = None        # 最近一次请求的 prompt token 数（来自 API usage）
+        self.last_completion_tokens = None
+
+    def _capture_usage(self, usage):
+        """从响应 usage 记录 prompt/completion token 数（供上下文占用环 / 压缩触发用）。"""
+        if isinstance(usage, dict):
+            if usage.get("prompt_tokens") is not None:
+                self.last_prompt_tokens = usage["prompt_tokens"]
+            if usage.get("completion_tokens") is not None:
+                self.last_completion_tokens = usage["completion_tokens"]
 
     def decide(self, messages, tools, on_delta=None):
         """发一次请求，解析成 Decision。提供 on_delta 时走流式（逐块吐文本）。"""
@@ -37,6 +47,7 @@ class OpenAICompatReasoner(Reasoner):
             return self._decide_stream(payload, on_delta)
 
         data = self._post("/chat/completions", payload)
+        self._capture_usage(data.get("usage"))
         msg = data["choices"][0]["message"]
         tcs = msg.get("tool_calls")
         if tcs:
@@ -56,6 +67,7 @@ class OpenAICompatReasoner(Reasoner):
     def _decide_stream(self, payload, on_delta):
         payload = dict(payload)
         payload["stream"] = True
+        payload["stream_options"] = {"include_usage": True}   # 让流式也返回 usage（末尾 chunk）
         body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
         headers = {"Content-Type": "application/json"}
         if self.api_key and self.api_key != "NONE":
@@ -84,6 +96,7 @@ class OpenAICompatReasoner(Reasoner):
                     obj = json.loads(data)
                 except json.JSONDecodeError:
                     continue
+                self._capture_usage(obj.get("usage"))   # usage chunk 通常 choices 为空
                 choices = obj.get("choices") or []
                 if not choices:
                     continue

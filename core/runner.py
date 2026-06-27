@@ -12,6 +12,7 @@ from .skills import enabled_skills
 from .context import build_system_prompt
 from .memory import build_memory
 from .loop import AgentLoop
+from .compaction import CompactingReasoner, estimate_tokens
 from . import threads as threads_mod
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -54,6 +55,14 @@ def build_reasoner(provider=None):
         p["base_url"], p["model"], api_key,
         timeout=_settings().get("request_timeout_s", 120))
     return reasoner, name
+
+
+def _provider_window(provider_name):
+    """取该模型的上下文预算 window_tokens（providers.json 每模型一个）；未配则用 settings 兜底。"""
+    cfg = _load_json(CONFIG / "providers.json", {"default": "deepseek", "providers": {}})
+    p = (cfg.get("providers", {}) or {}).get(provider_name or cfg.get("default")) or {}
+    fallback = (_settings().get("context") or {}).get("window_tokens", 128000)
+    return p.get("window_tokens") or fallback
 
 
 def _memory_base_dir():
@@ -159,6 +168,19 @@ def run_turn(goal, provider=None, on_event=None, thread_id=None, permission=None
     try:
         settings = _settings()
         workspace = settings.get("workspace", "default")
+
+        # 上下文压缩"透镜"：发给模型的消息做工具结果消隐 + 上报占用，磁盘仍存全本（领域无关）。
+        ctx = settings.get("context") or {}
+        if ctx.get("enabled"):
+            reasoner = CompactingReasoner(
+                reasoner,
+                window_tokens=_provider_window(provider_name),
+                compact_at=ctx.get("compact_at", 0.8),
+                keep_recent_turns=ctx.get("keep_recent_turns", 4),
+                elide=ctx.get("elide_tool_results", True),
+                elide_over_chars=ctx.get("elide_over_chars", 2000),
+                on_event=on_event)
+
         skills = enabled_skills(str(DATA / "skills"))   # 只注入勾选启用的技能
         memory = _build_memory(workspace)
         memories = memory.recall(goal)
@@ -186,8 +208,11 @@ def run_turn(goal, provider=None, on_event=None, thread_id=None, permission=None
 
         # 存档时去掉开头的 system（如果有）
         convo = messages[1:] if (messages and messages[0].role == "system") else messages
-        threads_mod.save_thread(str(DATA / "threads"), thread_id,
-                                {"provider": provider_name}, convo)
+        thread_cfg = {"provider": provider_name}
+        pt = getattr(reasoner, "last_prompt_tokens", None)
+        if pt is not None:                 # 记录本轮真实占用，供切线程时按线程显示圆环
+            thread_cfg["context"] = {"prompt_tokens": pt, "window": _provider_window(provider_name)}
+        threads_mod.save_thread(str(DATA / "threads"), thread_id, thread_cfg, convo)
         return thread_id, final
     finally:
         toolhub.close()
@@ -196,3 +221,15 @@ def run_turn(goal, provider=None, on_event=None, thread_id=None, permission=None
 def run_once(goal, provider=None, on_event=None, thread_id=None):
     """命令行用：跑一轮并返回最终回答（丢弃 thread_id）。"""
     return run_turn(goal, provider=provider, on_event=on_event, thread_id=thread_id)[1]
+
+
+def thread_context(data):
+    """计算一条线程的上下文占用（供切线程时更新圆环）：优先用存档的真实 prompt_tokens，
+    否则按消息粗估。返回 {prompt_tokens, window, pct}。"""
+    cfg = data.get("config") or {}
+    saved = cfg.get("context") or {}
+    win = saved.get("window") or _provider_window(cfg.get("provider"))
+    pt = saved.get("prompt_tokens")
+    if pt is None:
+        pt = estimate_tokens(threads_mod.deserialize(data.get("messages", [])))
+    return {"prompt_tokens": pt, "window": win, "pct": round(pt / win, 4) if win else 0}

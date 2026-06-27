@@ -61,7 +61,9 @@ class Handler(BaseHTTPRequestHandler):
         if path.startswith("/api/threads/"):
             tid = path[len("/api/threads/"):]
             try:
-                return self._json(threads_mod.load_thread(str(DATA / "threads"), tid))
+                data = threads_mod.load_thread(str(DATA / "threads"), tid)
+                data["context"] = runner.thread_context(data)   # 该线程的上下文占用（圆环用）
+                return self._json(data)
             except (OSError, ValueError) as e:
                 return self._json({"error": str(e)}, 404)
         return self._serve(path.lstrip("/"))
@@ -149,9 +151,12 @@ class Handler(BaseHTTPRequestHandler):
         skills = [{"name": s.name, "disclosure": s.disclosure, "tags": s.tags,
                    "enabled": en.get(s.name, True)}
                   for s in load_skills(str(DATA / "skills"))]
+        fb = (load_json(CONFIG / "settings.json", {}).get("context") or {}).get("window_tokens", 128000)
         return {
             "providers": {"default": prov.get("default"),
-                          "names": list(prov.get("providers", {}).keys())},
+                          "names": list(prov.get("providers", {}).keys()),
+                          "windows": {n: (p.get("window_tokens") or fb)
+                                      for n, p in prov.get("providers", {}).items()}},
             "mcp": [{"name": s["name"], "enabled": s.get("enabled", True)}
                     for s in mcp.get("servers", [])],
             "skills": skills,
@@ -221,6 +226,7 @@ class Handler(BaseHTTPRequestHandler):
                 "base_url": p.get("base_url", ""),
                 "model": p.get("model", ""),
                 "type": p.get("type", ""),
+                "window_tokens": p.get("window_tokens", ""),
                 "has_key": bool(secrets.get(name)) or env_set,
             }
         return out
@@ -236,6 +242,11 @@ class Handler(BaseHTTPRequestHandler):
                 providers[name]["base_url"] = body["base_url"]
             if "model" in body:
                 providers[name]["model"] = body["model"]
+            if body.get("window_tokens"):
+                try:
+                    providers[name]["window_tokens"] = max(1000, int(body["window_tokens"]))
+                except (TypeError, ValueError):
+                    pass
         (CONFIG / "providers.json").write_text(
             json.dumps(prov, ensure_ascii=False, indent=2), encoding="utf-8")
         if name and body.get("api_key"):

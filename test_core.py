@@ -86,6 +86,67 @@ miso = JsonMemory(tempfile.mkdtemp())
 miso.remember("只谈绘画：构图与色彩")
 check("无关查询不命中即返回空(记忆隔离)", miso.recall("音乐 混音 LUFS") == [])
 
+print("E. 上下文压缩 Phase 1（工具结果消隐 + 占用上报，领域无关）")
+from core.compaction import elide_tool_results, estimate_tokens, CompactingReasoner
+
+long_out = "x" * 5000
+cmsgs = [
+    Message(role="user", content="u1"),
+    Message(role="assistant", content=None, tool_calls=[ToolCall(id="a", name="t", arguments={})]),
+    Message(role="tool", tool_call_id="a", content=long_out),
+    Message(role="user", content="u2"),
+    Message(role="user", content="u3"),
+    Message(role="user", content="u4"),
+    Message(role="user", content="u5"),
+]
+eout, en = elide_tool_results(cmsgs, keep_recent_turns=4, elide_over_chars=2000)
+check("消隐陈旧超长工具输出", en == 1 and "已省略" in eout[2].content)
+check("消隐保留 tool_call_id", eout[2].tool_call_id == "a")
+check("消隐不改原消息(不可变)", cmsgs[2].content == long_out)
+
+recent = [Message(role="user", content="u1"),
+          Message(role="assistant", content=None, tool_calls=[ToolCall(id="b", name="t", arguments={})]),
+          Message(role="tool", tool_call_id="b", content="y" * 5000)]
+_o2, en2 = elide_tool_results(recent, keep_recent_turns=4, elide_over_chars=2000)
+check("近 K 回合内工具输出不消隐", en2 == 0)
+
+
+class CapReasoner:
+    def __init__(self):
+        self.last_prompt_tokens = 123
+        self.seen = None
+
+    def decide(self, messages, tools, on_delta=None):
+        self.seen = messages
+        return Decision(kind="final", text="ok")
+
+
+inner = CapReasoner()
+cevs = []
+cr = CompactingReasoner(inner, window_tokens=1000, keep_recent_turns=4,
+                        elide_over_chars=2000, on_event=lambda e: cevs.append(e))
+cd = cr.decide(cmsgs, [])
+check("透镜返回内层决策", cd.text == "ok")
+check("发给模型的是消隐版", "已省略" in inner.seen[2].content)
+check("外层全本未被改", cmsgs[2].content == long_out)
+check("上报 context 事件(真 token)", any(e.get("type") == "context" and e.get("prompt_tokens") == 123
+                                         for e in cevs))
+check("pct 正确", any(e.get("type") == "context" and abs(e.get("pct", 0) - 0.123) < 1e-6 for e in cevs))
+check("发出 compaction 事件", any(e.get("type") == "compaction" for e in cevs))
+
+
+class NoUsage:
+    def decide(self, m, t, on_delta=None):
+        return Decision(kind="final", text="ok")
+
+
+nevs = []
+CompactingReasoner(NoUsage(), window_tokens=1000,
+                   on_event=lambda e: nevs.append(e)).decide(
+    [Message(role="user", content="a" * 250)], [])
+check("无 usage 时用估算上报占用", any(e.get("type") == "context" and e.get("prompt_tokens") > 0
+                                      for e in nevs))
+
 print("C. MCP 客户端连通（真 reaper-mcp，不需 REAPER 打开）")
 server = "A:/科广/reaper-mcp/server/reaper_mcp_server.py"
 if os.path.exists(server):
