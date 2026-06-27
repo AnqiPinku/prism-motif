@@ -2,5 +2,14 @@
   "max_steps": 64,
   "request_timeout_s": 120,
   "base_prompt": "",
-  "workspace": "default"
+  "workspace": "default",
+  "context": {
+    "enabled": true,
+    "window_tokens": 128000,
+    "compact_at": 0.6,
+    "keep_recent_turns": 4,
+    "elide_tool_results": true,
+    "elide_over_chars": 2000,
+    "summarize": true
+  }
 }

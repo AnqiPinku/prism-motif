@@ -4,28 +4,33 @@
     "deepseek": {
       "base_url": "https://api.deepseek.com",
       "model": "deepseek-chat",
-      "api_key_env": "DEEPSEEK_API_KEY"
+      "api_key_env": "DEEPSEEK_API_KEY",
+      "window_tokens": 1000000
     },
     "qwen": {
       "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
       "model": "qwen-plus",
-      "api_key_env": "DASHSCOPE_API_KEY"
+      "api_key_env": "DASHSCOPE_API_KEY",
+      "window_tokens": 128000
     },
     "openai": {
       "base_url": "https://api.openai.com/v1",
       "model": "gpt-4o",
-      "api_key_env": "OPENAI_API_KEY"
+      "api_key_env": "OPENAI_API_KEY",
+      "window_tokens": 128000
     },
     "local": {
       "base_url": "http://localhost:11434/v1",
       "model": "qwen2.5",
-      "api_key_env": "NONE"
+      "api_key_env": "NONE",
+      "window_tokens": 32768
     },
     "mock": {
       "type": "mock",
       "model": "mock",
       "base_url": "",
-      "api_key_env": "NONE"
+      "api_key_env": "NONE",
+      "window_tokens": 16000
     }
   }
 }

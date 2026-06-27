@@ -49,7 +49,7 @@
 Anthropic 告诫：压缩是**不可逆丢弃**，有风险 → 对策"磁盘留全本、只压发给模型那份"。
 
 ### 实现规划（核心健壮性，领域无关，正当进核心）
-- **token 量**：不引 tokenizer，直接读 API 返回 `usage.prompt_tokens` 当真值；`OpenAICompatReasoner` 存 `last_prompt_tokens`（加属性，不改契约）。也是 UI 圆环的数据源。
+- **token 量**：不引 tokenizer，直接读 API 返回 `usage.prompt_tokens` 当真值；`OpenAICompatReasoner` 存 `last_prompt_tokens`（加属性，不改契约）。也是 UI 圆环的数据源。流式需 `stream_options:{include_usage:true}` 取末尾 usage chunk（DeepSeek/OpenAI 支持；极少数严格服务端可能不认该字段 → 无 usage 时回退 `estimate_tokens` 粗估，不崩）。
 - **两段式**（`core/compaction.py`）：① 工具结果消隐（无 LLM）② 还超预算→摘要压实（一次 LLM 调用，结构化提示保留决定/事实/未决/偏好）。永远保留 系统提示 + 最近 K 轮原文 + 摘要。
 - **触发**：`run_turn` 回合前 `last_prompt_tokens > compact_at × window` 就先压实（pre-turn）。
 - **不可逆对策**：磁盘线程存全本，压实只作用于"发给模型那份"。

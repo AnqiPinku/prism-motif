@@ -11,6 +11,9 @@ const el = (tag, cls, txt) => {
 let sending = false;
 let currentThreadId = null;
 let currentAbort = null;
+let providerWindows = {};   // 各模型的上下文预算（来自 /api/state）
+
+function ctxBudget() { return providerWindows[$("provider").value] || 128000; }
 
 function setSending(on) {
   sending = on;
@@ -28,11 +31,13 @@ function postJSON(url, obj) {
 
 async function loadState() {
   const s = await fetch("/api/state").then((r) => r.json());
+  providerWindows = (s.providers && s.providers.windows) || {};
   renderProviders(s.providers);
   renderWorkspaces(s.workspace);
   renderMcp(s.mcp);
   renderSkills(s.skills);
   renderThreads(s.threads);
+  if (!currentThreadId) renderContextRing(0, ctxBudget(), 0);   // 无活动线程→圆环归零
 }
 
 function renderWorkspaces(ws) {
@@ -179,6 +184,7 @@ async function openThread(id) {
     if (m.role === "user") addUser(m.content);
     else if (m.role === "assistant" && m.content) addAssistant().textEl.textContent = m.content;
   });
+  if (data.context) renderContextRing(data.context.prompt_tokens, data.context.window, data.context.pct);
 }
 
 function addUser(text) {
@@ -278,6 +284,10 @@ function handleEvent(e, asst) {
     acts.appendChild(allow); acts.appendChild(deny);
     card.appendChild(acts);
     asst.body.appendChild(card);
+  } else if (e.type === "context") {
+    renderContextRing(e.prompt_tokens, e.window, e.pct);
+  } else if (e.type === "compaction") {
+    asst.body.appendChild(el("div", "trace compact", trim(e.content)));
   } else if (e.type === "tool_call") {
     asst.body.appendChild(el("div", "trace call", e.name + "(" + fmt(e.arguments) + ")"));
   } else if (e.type === "tool_result") {
@@ -288,6 +298,19 @@ function handleEvent(e, asst) {
     asst.textEl.textContent = "出错：" + (e.message || "");
   }
   scroll();
+}
+
+const CTX_C = 87.96; // 2π·14
+function renderContextRing(pt, win, pct) {
+  const box = $("ctx");
+  if (!box) return;
+  box.hidden = false;
+  const p = Math.max(0, Math.min(1, pct || 0));
+  const dash = p * CTX_C;
+  const arc = $("ctx-arc");
+  arc.setAttribute("stroke-dasharray", dash.toFixed(1) + " " + (CTX_C - dash).toFixed(1));
+  arc.setAttribute("stroke", p >= 0.8 ? "#c0392b" : p >= 0.6 ? "#e0a400" : "#1f9d57");
+  $("ctx-tip").textContent = "已用 " + fmtTokens(pt) + " / 预算 " + fmtTokens(win) + "（" + Math.round(p * 100) + "%）";
 }
 
 function fmt(o) {
@@ -315,7 +338,12 @@ $("input").addEventListener("input", function () {
   this.style.height = "auto";
   this.style.height = Math.min(this.scrollHeight, 140) + "px";
 });
-$("new-chat").onclick = () => { $("messages").innerHTML = ""; currentThreadId = null; };
+$("new-chat").onclick = () => {
+  $("messages").innerHTML = "";
+  currentThreadId = null;
+  renderContextRing(0, ctxBudget(), 0);   // 新对话：上下文从零开始
+};
+$("provider").onchange = () => { if (!currentThreadId) renderContextRing(0, ctxBudget(), 0); };
 
 // skill modal
 $("new-skill").onclick = () => $("skill-modal").classList.remove("hidden");
@@ -377,16 +405,35 @@ async function openSettings() {
   $("settings-modal").classList.remove("hidden");
 }
 
+// 上下文预算档位（跨数量级，滑轨吸附到这些标准值；含各模型默认值）
+const WINDOW_STOPS = [8000, 16000, 32768, 64000, 128000, 192000, 256000, 384000, 512000, 768000, 1000000];
+function fmtTokens(n) {
+  n = Math.round(n || 0);
+  if (n >= 1000000) return +(n / 1000000).toFixed(1) + "M";
+  if (n >= 1000) return +(n / 1000).toFixed(n >= 10000 ? 0 : 1) + "K";
+  return "" + n;
+}
+function windowIndexFor(v) {
+  v = +v || 128000;
+  let best = 0, bd = Infinity;
+  WINDOW_STOPS.forEach((s, i) => { const d = Math.abs(s - v); if (d < bd) { bd = d; best = i; } });
+  return best;
+}
+
 function fillProviderFields(name) {
   const p = settingsData.providers[name] || {};
   $("set-baseurl").value = p.base_url || "";
   $("set-model").value = p.model || "";
+  const idx = windowIndexFor(p.window_tokens);
+  $("set-window").value = idx;
+  $("set-window-val").textContent = fmtTokens(WINDOW_STOPS[idx]);
   $("set-key").value = "";
   $("set-keystatus").textContent = p.has_key ? "（已设置，留空则保留）" : "（未设置）";
 }
 
 $("open-settings").onclick = openSettings;
 $("set-provider").onchange = function () { fillProviderFields(this.value); };
+$("set-window").oninput = function () { $("set-window-val").textContent = fmtTokens(WINDOW_STOPS[+this.value]); };
 $("set-cancel").onclick = () => $("settings-modal").classList.add("hidden");
 $("set-save").onclick = async () => {
   const name = $("set-provider").value;
@@ -396,6 +443,7 @@ $("set-save").onclick = async () => {
     base_url: $("set-baseurl").value.trim(),
     model: $("set-model").value.trim(),
   };
+  payload.window_tokens = WINDOW_STOPS[+$("set-window").value];
   const key = $("set-key").value.trim();
   if (key) payload.api_key = key;
   await fetch("/api/settings", {

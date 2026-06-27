@@ -20,6 +20,11 @@ button{font-family:inherit;cursor:pointer}
 .spacer{flex:1}
 .icon-btn{width:30px;height:30px;border:1px solid var(--border);background:var(--bg);border-radius:8px;color:var(--muted);display:inline-flex;align-items:center;justify-content:center;font-size:15px}
 .icon-btn:hover{background:var(--surface)}
+.ctx{position:relative;display:inline-flex;align-items:center;margin-right:2px;cursor:default}
+.ctx[hidden]{display:none}
+.ctx svg{display:block}
+.ctx-tip{position:absolute;bottom:150%;right:-2px;white-space:nowrap;background:var(--text);color:#fff;font-size:11px;line-height:1.2;padding:5px 9px;border-radius:7px;opacity:0;pointer-events:none;transition:opacity .12s;box-shadow:0 2px 8px rgba(0,0,0,.18)}
+.ctx:hover .ctx-tip{opacity:1}
 .main{flex:1;display:flex;min-height:0}
 .left{width:170px;flex-shrink:0;border-right:1px solid var(--border);padding:12px 10px;display:flex;flex-direction:column;gap:8px;overflow:auto}
 .right{width:210px;flex-shrink:0;border-left:1px solid var(--border);padding:14px 12px;display:flex;flex-direction:column;gap:22px;overflow:auto}
@@ -53,6 +58,8 @@ button{font-family:inherit;cursor:pointer}
 .trace.ok::before{content:"✓";color:#1f9d57}
 .trace.err::before{content:"✗";color:#c0392b}
 .trace.call::before{content:"→";color:var(--blue)}
+.trace.compact{color:#8a8a8a}
+.trace.compact::before{content:"↯";color:#8a8a8a}
 .composer{padding:10px 14px 14px;border-top:1px solid var(--border)}
 .composer-box{border:1px solid var(--border);border-radius:12px;padding:8px 10px}
 .composer-box:focus-within{border-color:var(--blue)}
@@ -80,6 +87,7 @@ select{height:30px;border:1px solid var(--border);border-radius:8px;background:v
 .modal-card{background:var(--bg);border-radius:12px;padding:18px;width:380px;max-width:90%;display:flex;flex-direction:column;gap:10px}
 .modal-card h3{margin:0;font-size:15px;font-weight:600}
 .modal-card input,.modal-card textarea,.modal-card select{width:100%;border:1px solid var(--border);border-radius:8px;padding:7px 9px;font-family:inherit;font-size:13px}
+.modal-card input[type=range]{padding:0;border:none;accent-color:var(--blue);cursor:pointer;height:18px}
 .modal-card textarea{min-height:90px;resize:vertical}
 .modal-actions{display:flex;justify-content:flex-end;gap:8px}
 .modal-actions button{padding:7px 14px;border-radius:8px;border:1px solid var(--border);background:var(--bg);font-size:13px}
@@ -122,6 +130,14 @@ select{height:30px;border:1px solid var(--border);border-radius:8px;background:v
             <label class="bypass" title="开启后，危险操作（执行命令/写删文件）不再逐个确认"><input type="checkbox" id="bypass"> 绕过确认</label>
             <div class="spacer"></div>
             <select id="provider"></select>
+            <div class="ctx" id="ctx" hidden>
+              <svg viewBox="0 0 36 36" width="18" height="18" aria-hidden="true">
+                <circle cx="18" cy="18" r="14" fill="none" stroke="var(--surface2)" stroke-width="6"/>
+                <circle id="ctx-arc" cx="18" cy="18" r="14" fill="none" stroke="#1f9d57" stroke-width="6"
+                        stroke-linecap="round" transform="rotate(-90 18 18)" stroke-dasharray="0 88"/>
+              </svg>
+              <span class="ctx-tip" id="ctx-tip"></span>
+            </div>
             <button class="send-btn" id="send" title="发送">➤</button>
           </div>
         </div>
@@ -187,6 +203,9 @@ select{height:30px;border:1px solid var(--border);border-radius:8px;background:v
     <input id="set-baseurl" placeholder="如 https://api.deepseek.com">
     <label>模型名称</label>
     <input id="set-model" placeholder="如 deepseek-chat">
+    <label>上下文预算 <span id="set-window-val" class="muted"></span></label>
+    <input id="set-window" type="range" min="0" max="10" step="1" value="4">
+    <div class="muted" style="font-size:11px;margin-top:-3px">圆环分母 · 留质量余量，非模型硬上限</div>
     <label>API Key <span id="set-keystatus" class="muted"></span></label>
     <input id="set-key" type="password" placeholder="粘贴 key（留空 = 不修改）">
     <div class="modal-actions">
