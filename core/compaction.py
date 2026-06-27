@@ -94,7 +94,7 @@ class CompactingReasoner(Reasoner):
     并按 on_event 上报上下文占用（供前端圆环）。本身就是个 Reasoner，对 AgentLoop 透明；
     AgentLoop 持有的全本消息不受影响，照常由上层存盘。"""
 
-    def __init__(self, inner, window_tokens=65536, compact_at=0.8,
+    def __init__(self, inner, window_tokens=128000, compact_at=0.6,
                  keep_recent_turns=4, elide=True, elide_over_chars=2000, on_event=None):
         self.inner = inner
         self.window_tokens = window_tokens

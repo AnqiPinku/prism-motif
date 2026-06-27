@@ -55,6 +55,9 @@ def build_reasoner(provider=None):
     reasoner = OpenAICompatReasoner(
         p["base_url"], p["model"], api_key,
         timeout=_settings().get("request_timeout_s", 120))
+    r = _settings().get("retry") or {}        # 瞬时错误重试/退避
+    reasoner.max_attempts = int(r.get("max_attempts", 3))
+    reasoner.retry_base_delay = float(r.get("base_delay_s", 1.0))
     return reasoner, name
 
 
@@ -163,7 +166,7 @@ def run_turn(goal, provider=None, on_event=None, thread_id=None, permission=None
 
     mcp_cfg = _load_json(CONFIG / "mcp_servers.json", {"servers": []})
     enabled = [s for s in mcp_cfg.get("servers", []) if s.get("enabled", True)]
-    toolhub = ToolHub(enabled)
+    toolhub = ToolHub(enabled, tool_timeout=_settings().get("tool_timeout_s", 60))
     toolhub.start()
 
     try:
@@ -173,11 +176,18 @@ def run_turn(goal, provider=None, on_event=None, thread_id=None, permission=None
         # 上下文压缩"透镜"：发给模型的消息做工具结果消隐 + 上报占用，磁盘仍存全本（领域无关）。
         ctx = settings.get("context") or {}
         raw_reasoner = reasoner            # 摘要压实用原始模型（不经透镜，避免递归/重复上报）
+        _notify = on_event or (lambda _e: None)
+        try:                               # 模型瞬时错误重试时流式上报，让前端可见
+            raw_reasoner.on_retry = lambda a, m, why: _notify(
+                {"type": "retry", "attempt": a, "max": m,
+                 "content": "模型调用失败，重试 %d/%d（%s）" % (a, m, why)})
+        except Exception:                  # noqa: BLE001
+            pass
         if ctx.get("enabled"):
             reasoner = CompactingReasoner(
                 reasoner,
                 window_tokens=_provider_window(provider_name),
-                compact_at=ctx.get("compact_at", 0.8),
+                compact_at=ctx.get("compact_at", 0.6),
                 keep_recent_turns=ctx.get("keep_recent_turns", 4),
                 elide=ctx.get("elide_tool_results", True),
                 elide_over_chars=ctx.get("elide_over_chars", 2000),

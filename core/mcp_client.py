@@ -2,6 +2,9 @@
 与我们写的 reaper-mcp 服务端对称，只用标准库 subprocess + json。"""
 import os
 import json
+import time
+import queue
+import threading
 import subprocess
 
 from .contracts import ToolSpec, ToolResult
@@ -10,12 +13,15 @@ PROTOCOL_VERSION = "2024-11-05"
 
 
 class MCPClient:
-    def __init__(self, command, args, env=None):
+    def __init__(self, command, args, env=None, timeout=60):
         self.command = command
         self.args = args or []
         self.env = env
+        self.timeout = float(timeout) if timeout else 60.0   # 单次调用超时（防 MCP 进程挂死）
         self.proc = None
         self._id = 0
+        self._q = None        # 读线程把 stdout 行塞进这个队列
+        self._reader = None
 
     def start(self):
         """起子进程 + initialize 握手 + initialized 通知。"""
@@ -28,6 +34,10 @@ class MCPClient:
             stderr=subprocess.DEVNULL, text=True, encoding="utf-8",
             bufsize=1, env=full_env,
         )
+        # 后台读线程：把 stdout 逐行塞进队列，让 _rpc 能带超时地等响应（Windows 管道无法 select）。
+        self._q = queue.Queue()
+        self._reader = threading.Thread(target=self._read_loop, daemon=True)
+        self._reader.start()
         self._rpc("initialize", {
             "protocolVersion": PROTOCOL_VERSION,
             "capabilities": {},
@@ -76,12 +86,28 @@ class MCPClient:
     def _notify(self, method, params):
         self._send({"jsonrpc": "2.0", "method": method, "params": params})
 
+    def _read_loop(self):
+        """后台把子进程 stdout 逐行塞进队列；流关闭（进程退出）后塞一个 "" 哨兵。"""
+        try:
+            for line in self.proc.stdout:
+                self._q.put(line)
+        except Exception:  # noqa: BLE001
+            pass
+        self._q.put("")
+
     def _rpc(self, method, params):
         rid = self._next_id()
         self._send({"jsonrpc": "2.0", "id": rid, "method": method, "params": params})
+        deadline = time.monotonic() + self.timeout
         while True:
-            line = self.proc.stdout.readline()
-            if line == "":
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise RuntimeError("MCP 调用超时（method=%s，%.0fs）" % (method, self.timeout))
+            try:
+                line = self._q.get(timeout=remaining)
+            except queue.Empty:
+                raise RuntimeError("MCP 调用超时（method=%s，%.0fs）" % (method, self.timeout))
+            if line == "":                       # 哨兵：子进程已退出
                 raise RuntimeError("MCP server 已退出（method=%s）" % method)
             line = line.strip()
             if not line:

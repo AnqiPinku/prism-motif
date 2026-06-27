@@ -63,8 +63,14 @@ Anthropic 告诫：压缩是**不可逆丢弃**，有风险 → 对策"磁盘留
 
 ## 6. 成熟度待办（"成熟 ≠ 加功能"；内核只需 健壮 + 可观测 + 好搭）
 
-健壮性：① **上下文压缩**（见 §5，最优先）② 重试/退避 + 工具超时 ③ 服务端真取消 + token/步数预算。
+健壮性：✅① **上下文压缩**（Phase1+2 完成，见 §5）✅② **重试/退避 + 工具超时**（完成，见 §7）③ 服务端真取消 + token/步数预算。
 可观测：④ 结构化 trace 持久化 + token 计量。
 更干净：⑤ 权限闸去硬编码（危险性来自工具元数据/config，核心不再认识具体工具名）⑥ 记忆写入走"记忆 MCP"而非核心代码。
 立地基：⑦ 把核心作为"库"的清晰 API（run_turn / Session 类 + 文档），因为编排都在 harness 层组合。
 别加：编排（反思/规划/多agent）→harness；领域逻辑→不进核心；具体能力→MCP。
+
+## 7. 可靠性：重试/退避 + 工具超时（已完成）
+
+- **LLM 重试/退避**（`openai_compat.py` 的 `_open`）：只对**瞬时错误**重试（429/408/409/5xx + URLError/Timeout/OSError），4xx（400/401 等）立即抛不重试；指数退避 `base×2^(n-1)` + 抖动；`max_attempts`/`base_delay_s` 来自 `settings.retry`。**流式只重试"建连"那步**——一旦开始读流/吐字就不再重试，避免重复吐字。`on_retry` 回调 → 前端 `retry` 事件（琥珀 ⟳）。
+- **MCP 工具超时**（`mcp_client.py`）：原来 `_rpc` 阻塞 `readline()` 会无限挂（Windows 管道无法 select）。改成**后台读线程把 stdout 逐行塞队列 + `_rpc` 用 deadline + `queue.get(timeout=)` 等响应**；超时则抛 → `call_tool` 兜成 `is_error` ToolResult，循环把错误回灌给模型、不挂死。进程退出塞 "" 哨兵。超时后迟到的响应留队列里，下次 `_rpc` 靠 id 不匹配跳过。`tool_timeout_s`（默认 60）经 `ToolHub(tool_timeout=)` 传入。
+- 契约：`OpenAICompatReasoner/MCPClient/ToolHub.__init__` 只加**带默认值的可选参数**，向后兼容；`Reasoner.decide` 未动。零依赖（time/random/queue/threading/urllib 皆 stdlib）。
