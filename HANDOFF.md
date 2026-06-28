@@ -10,19 +10,19 @@
 通过挂不同的 **MCP server** 获得能力（控音乐 / 操作电脑…），通过**技能**赋予人格与玩法。
 当前用 **DeepSeek** 当大脑，已接两个 MCP：**reaper-mcp**（控 REAPER 做音乐）、**system-mcp**（操作电脑文件/命令）。
 
-## 2. 三个仓库位置（同在 `A:\科广\`，注意路径含中文，已处理好）
+## 2. 三个仓库位置（同在 `A:\Prismcode\`，注意路径含中文，已处理好）
 
 | 路径 | 是什么 | 依赖 |
 |---|---|---|
-| `A:\科广\prism-core\` | agent 内核 + gateway + web 前端 | **零依赖**（仅标准库） |
-| `A:\科广\reaper-mcp\` | REAPER 的 MCP server（Lua 桥 + Python server，20 工具） | **零依赖** |
-| `A:\科广\system-mcp\` | 电脑操作 MCP server（11 工具） | **零依赖** |
+| `A:\Prismcode\prism-core\` | agent 内核 + gateway + web 前端 | **零依赖**（仅标准库） |
+| `A:\Prismcode\reaper-mcp\` | REAPER 的 MCP server（Lua 桥 + Python server，20 工具） | **零依赖** |
+| `A:\Prismcode\system-mcp\` | 电脑操作 MCP server（11 工具） | **零依赖** |
 
 **仓库模型（重要定位）**：`prism-core` 是一个**干净的原型/种子**，不是要冻结的对外库。开一个**领域 agent**（如 music-agent）= `git clone prism-core` 当起点 → 把 prism-core 设为 `upstream` 远端 → 在里面自由加 技能/config/harness（如 audio 自听 Reflexion）、**也可以改核心**；想要核心后来的改进就偶尔 `git merge upstream`，反过来通用改进可回流到种子。**MCP（reaper/system/audio…）各自独立仓、跨 agent 复用**。多 agent 不靠"依赖+钉版本"，靠"从种子分叉 + 上游合并"。
 
 ## 3. 已完成（M1 内核 + 完整前端 + 电脑操作能力，均已实测）
 
-**core/**（`A:\科广\prism-core\core\`）
+**core/**（`A:\Prismcode\prism-core\core\`）
 - `contracts.py` 数据模型；`reasoner.py` 大脑接口 + `reasoners/openai_compat.py`（urllib 打 OpenAI 兼容，**支持流式**）+ `reasoners/mock.py`（免 key 测试用）
 - `mcp_client.py` 手写 MCP stdio 客户端；`tools.py` ToolHub（连多 MCP、聚合、路由）
 - `skills.py` 技能库（增删/启用状态，存 `data/skills/_enabled.json`）；`context.py` 拼系统提示
@@ -87,12 +87,12 @@
 ## 6. 怎么跑 / 怎么验证
 
 ```bash
-cd A:\科广\prism-core
+cd A:\Prismcode\prism-core
 python gateway/server.py          # 启动，浏览器开 http://127.0.0.1:8770（窗口别关）
 python test_core.py               # 离线自测（不需 REAPER/不需 key）
 ```
 - DeepSeek key 已在 `config/secrets.json`，也可在界面 ⚙ 改。用 **mock** 大脑可零依赖测 UI。
-- 真控 REAPER：打开 REAPER → Actions 里 Run `A:\科广\reaper-mcp\bridge\reaper_mcp_bridge.lua`（见 "ready"）。
+- 真控 REAPER：打开 REAPER → Actions 里 Run `A:\Prismcode\reaper-mcp\bridge\reaper_mcp_bridge.lua`（见 "ready"）。
 
 ## 7. 已知坑
 - **端口 8770 同一时刻只能一个 gateway**；旧进程没退会"端口占用"（现在有明确提示，或 `set PRISM_PORT=8771` 换端口）。
