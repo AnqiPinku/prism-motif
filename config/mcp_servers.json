@@ -5,7 +5,7 @@
       "enabled": false,
       "command": "python",
       "args": [
-        "A:/科广/reaper-mcp/server/reaper_mcp_server.py"
+        "A:/Prismcode/reaper-mcp/server/reaper_mcp_server.py"
       ]
     },
     {
@@ -13,7 +13,7 @@
       "enabled": false,
       "command": "python",
       "args": [
-        "A:/科广/system-mcp/server.py"
+        "A:/Prismcode/system-mcp/server.py"
       ]
     }
   ]

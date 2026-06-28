@@ -266,7 +266,7 @@ finally:
     _oc.urllib.request.urlopen = _orig
 
 print("C. MCP 客户端连通（真 reaper-mcp，不需 REAPER 打开）")
-server = "A:/科广/reaper-mcp/server/reaper_mcp_server.py"
+server = "A:/Prismcode/reaper-mcp/server/reaper_mcp_server.py"
 if os.path.exists(server):
     hub = ToolHub([{"name": "reaper", "command": sys.executable, "args": [server]}])
     try:
