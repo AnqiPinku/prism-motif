@@ -1,0 +1,14 @@
+interface:
+  display_name: "REAPER Producer"
+  short_description: "Safe REAPER production workflows through MCP."
+  default_prompt: "Use $reaper-producer to inspect the current REAPER project and propose a safe next production step."
+
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "reaper"
+      description: "REAPER MCP v2 server for live REAPER project control."
+      transport: "stdio"
+
+policy:
+  allow_implicit_invocation: true

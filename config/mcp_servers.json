@@ -2,10 +2,18 @@
   "servers": [
     {
       "name": "reaper",
-      "enabled": false,
+      "enabled": true,
       "command": "python",
       "args": [
         "A:/Prismcode/reaper-mcp/server/reaper_mcp_server.py"
+      ]
+    },
+    {
+      "name": "music-perception",
+      "enabled": true,
+      "command": "python",
+      "args": [
+        "A:/Prismcode/music-perception-mcp/server/music_perception_server.py"
       ]
     },
     {
