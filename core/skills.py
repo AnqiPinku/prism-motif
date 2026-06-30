@@ -42,15 +42,23 @@ def _parse(text, path):
 
 
 def load_skills(skills_dir):
-    """读取目录下所有 .md 技能。目录不存在则返回空列表。"""
+    """读取目录下的技能。两种形态：
+      · 扁平：data/skills/<name>.md
+      · 文件夹：data/skills/<name>/SKILL.md（可带 references/ scripts/ 等附件）
+    目录不存在则返回空列表。"""
     out = []
     if not os.path.isdir(skills_dir):
         return out
     for fn in sorted(os.listdir(skills_dir)):
-        if fn.endswith(".md"):
-            p = os.path.join(skills_dir, fn)
+        p = os.path.join(skills_dir, fn)
+        if fn.endswith(".md") and os.path.isfile(p):
             with open(p, "r", encoding="utf-8") as f:
                 out.append(_parse(f.read(), p))
+        elif os.path.isdir(p):
+            skill_md = os.path.join(p, "SKILL.md")
+            if os.path.isfile(skill_md):
+                with open(skill_md, "r", encoding="utf-8") as f:
+                    out.append(_parse(f.read(), skill_md))
     return out
 
 
