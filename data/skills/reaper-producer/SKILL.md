@@ -61,7 +61,7 @@ Prefer these stable patterns:
 - Track creation/editing: `add_track`, then `update_track` for name, volume, pan, mute, solo, or color.
 - MIDI creation: `create_midi_item`, then `add_midi_notes` with beat-based timing.
 - MIDI edits: `get_midi_notes`, then targeted edits through available tools or carefully planned `run_lua`; ask confirmation before clearing/replacing an item.
-- FX: `list_track_fx`, `add_track_fx`, `get_fx_params`, and `set_fx_param`.
+- FX: `list_track_fx`, `add_track_fx`, `get_fx_params`, and `set_fx_param`. For **precise ReaEQ** moves (set a band to an exact Hz/dB/Q), use the dedicated EQ API in real units instead of guessing normalized values — read `references/reaeq.md`.
 - Project setup: `set_tempo`, `set_time_signature`, `set_time_selection`, and `add_marker`.
 - Transport: `transport` with `play`, `stop`, `pause`, `toggle_repeat`, or `goto_start`. Treat `record` as high risk.
 - Rendering: `render_project` only after confirming output and overwrite risk. For analysis, prefer `render_to_wav` (throwaway WAV to a known path) — see Perception Loop below.
@@ -85,7 +85,7 @@ You can now *hear* the project, not just read its state. Use this whenever a req
    - integrated LUFS under target → raise master/track gain by the gap.
    - true peak above the ceiling (e.g. > −1 dBTP) → lower the limiter ceiling / output gain.
    - clipping timestamps present → locate and tame the offending peak.
-   - one spectral band hot vs the rest (e.g. `low_mid`) → targeted EQ cut there.
+   - one spectral band hot vs the rest (e.g. `low_mid`) → targeted EQ cut there (exact band targeting: `references/reaeq.md`).
    - measured key/tempo conflicts with a sample → transpose / time-stretch.
 4. **Adjust** with the normal reaper tools (`set_fx_param`, `update_track`, …).
 5. **Verify acoustically**: re-render, re-measure, and report the before→after numbers. This is the "verify after a write" rule, done with your ears.
@@ -184,6 +184,7 @@ Use `references/evals.md` when testing whether the workflow behaves well. For a 
 - `scripts/validate_instrument_registry.py`: Validate an instrument registry before using it.
 - `scripts/insert_instrument_template.py`: Insert a registered `.RTrackTemplate` through the v2 file bridge when explicitly requested.
 - `references/tool-map.md`: Preferred REAPER MCP v2 tools, safer substitutions, and risky tools.
+- `references/reaeq.md`: Precise ReaEQ band control in real units (Hz/dB/Q) — signatures, verified enums, band-addressing gotcha, batched-write pattern, and a one-time `isnorm` confirmation probe.
 - `references/production-semantics.md`: Music-production phrase mapping, including common Chinese feedback.
 - `references/instrument-loading.md`: On-demand instrument template workflow for Kontakt, samplers, and VSTi libraries.
 - `references/evals.md`: Manual/agent eval scenarios and pass criteria.
