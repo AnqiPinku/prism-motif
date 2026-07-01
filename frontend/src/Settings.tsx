@@ -11,8 +11,8 @@ const Icon = ({ n, s }: { n: string; s?: number }) => (
   <span className="material-symbols-outlined" style={s ? { fontSize: s } : undefined} aria-hidden>{n}</span>
 )
 
-export default function Settings({ state, onClose, onSaved }:
-  { state: State; onClose: () => void; onSaved: () => void }) {
+export default function Settings({ state, trust, setTrust, onClose, onSaved }:
+  { state: State; trust: boolean; setTrust: (v: boolean) => void; onClose: () => void; onSaved: () => void }) {
   const [data, setData] = useState<SettingsData | null>(null)
   const [def, setDef] = useState('')
   const [pick, setPick] = useState('')
@@ -113,6 +113,14 @@ export default function Settings({ state, onClose, onSaved }:
               <div className="togglerow" key={s.name}>{s.name}<span className="tag">{s.disclosure === 'full' ? '常驻' : '按需'}</span>
                 <button className={'switch' + (s.enabled ? '' : ' off')} aria-label={s.name} onClick={() => toggleSkill(s.name, !s.enabled)} /></div>
             ))}
+          </div>
+
+          <div className="sec">
+            <h3>行为</h3>
+            <div className="togglerow">信任模式
+              <span className="tag">危险操作不再逐个确认</span>
+              <button className={'switch' + (trust ? '' : ' off')} aria-label="信任模式" onClick={() => setTrust(!trust)} /></div>
+            <div className="keystate">开启后，执行命令、写/删文件等危险操作会直接放行，不再弹确认。</div>
           </div>
 
           <div className="btnrow">

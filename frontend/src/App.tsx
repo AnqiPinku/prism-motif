@@ -25,7 +25,8 @@ export default function App() {
   const [msgs, setMsgs] = useState<Msg[]>([])
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
-  const [bypass, setBypass] = useState(false)
+  const [bypass, setBypassState] = useState(() => localStorage.getItem('pm_trust') === '1')
+  const setBypass = (v: boolean) => { setBypassState(v); localStorage.setItem('pm_trust', v ? '1' : '0') }
   const [statusOpen, setStatusOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [onboarding, setOnboarding] = useState(false)
@@ -142,7 +143,6 @@ export default function App() {
         onInput={(e) => { const t = e.currentTarget; t.style.height = 'auto'; t.style.height = Math.min(t.scrollHeight, 140) + 'px' }}
         onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() } }}
       />
-      <label className="bypass"><input type="checkbox" checked={bypass} onChange={(e) => setBypass(e.target.checked)} />绕过确认</label>
       <span className="modelchip">
         <I n="bolt" s={16} />
         <select value={provider} onChange={(e) => setProvider(e.target.value)}>
@@ -226,7 +226,8 @@ export default function App() {
       </div>
 
       {settingsOpen && state && (
-        <Settings state={state} onClose={() => setSettingsOpen(false)}
+        <Settings state={state} trust={bypass} setTrust={setBypass}
+          onClose={() => setSettingsOpen(false)}
           onSaved={() => { loadState(); loadSettings() }} />
       )}
       {onboarding && (
