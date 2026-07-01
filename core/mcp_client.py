@@ -30,13 +30,20 @@ class MCPClient:
         full_env = dict(os.environ)
         if self.env:
             full_env.update(self.env)
-        # 声明了 GEMINI_* 中转设置的 server（= 感知 sidecar）→ 从钥匙链补 API key。
-        # env 已设则不覆盖（环境变量优先），密钥只进这一个子进程、绝不落任何文件。
-        if (self.env and any(k.startswith("GEMINI_") for k in self.env)
-                and not full_env.get("GEMINI_API_KEY")):
-            k = secrets_store.get_secret("GEMINI_API_KEY")
-            if k:
-                full_env["GEMINI_API_KEY"] = k
+        # 声明了 GEMINI_* 中转设置的 server（= 感知 sidecar）：
+        #  ① 从钥匙链补 GEMINI API key（env 已设则不覆盖 → 环境变量优先；密钥只进这一个子进程、绝不落文件）
+        #  ② 钉 numba 磁盘缓存到稳定 per-user 目录，让首次 ~16s JIT 编译只发生一次、跨 app 更新保留
+        if self.env and any(k.startswith("GEMINI_") for k in self.env):
+            if not full_env.get("GEMINI_API_KEY"):
+                k = secrets_store.get_secret("GEMINI_API_KEY")
+                if k:
+                    full_env["GEMINI_API_KEY"] = k
+            cache = paths.numba_cache_dir()
+            try:
+                os.makedirs(cache, exist_ok=True)
+            except OSError:
+                pass
+            full_env.setdefault("NUMBA_CACHE_DIR", cache)
         command = paths.expand(self.command)          # 展开 ${PRISM_HOME} 令牌 → 绝对路径
         args = [paths.expand(a) for a in self.args]
         for a in args:   # 缺脚本会因 stderr=DEVNULL 静默失败 → 提前报清楚（安装不完整/兄弟仓缺失）
