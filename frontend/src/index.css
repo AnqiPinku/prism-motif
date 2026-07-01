@@ -58,12 +58,26 @@ body.nav-resizing{cursor:col-resize;user-select:none}
 .newchat{display:flex;align-items:center;justify-content:center;gap:10px;height:48px;padding:0 18px;margin:10px 0 4px;background:var(--primary-container);color:var(--on-primary-container);border:none;border-radius:16px;font-size:14px;font-weight:500}
 .newchat:hover{filter:brightness(.98)}
 .navlabel{font-size:12px;color:var(--muted);padding:10px 14px 4px;font-weight:500}
-.thread{display:flex;align-items:center;gap:10px;height:40px;padding:0 14px;border-radius:20px;font-size:14px;color:var(--on-surface-var);border:none;background:transparent;width:100%;text-align:left}
+.thread{position:relative;display:flex;align-items:center;height:40px;border-radius:20px;font-size:14px;color:var(--on-surface-var);width:100%;transition:background .12s}
 .thread:hover{background:var(--surface-2)}
 .thread.active{background:var(--primary-container);color:var(--on-primary-container)}
 .thread .material-symbols-outlined{font-size:20px;color:var(--muted)}
 .thread.active .material-symbols-outlined{color:var(--on-primary-container)}
-.thread .t{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.thread .topen{flex:1;min-width:0;display:flex;align-items:center;gap:10px;height:100%;padding:0 30px 0 14px;border:none;background:transparent;color:inherit;font:inherit;text-align:left;border-radius:20px}
+/* 标题末端渐隐（替代省略号），给悬停的 ⋯ 留出淡出区 */
+.thread .t{flex:1;min-width:0;white-space:nowrap;overflow:hidden;
+  mask-image:linear-gradient(90deg,#000 calc(100% - 26px),transparent);
+  -webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 26px),transparent)}
+/* ⋯ 平时隐藏，悬停行或菜单打开时浮现 */
+.thread .tmenu{position:absolute;right:6px;width:28px;height:28px;border:none;border-radius:50%;background:transparent;color:var(--muted);display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .12s,background .12s}
+.thread:hover .tmenu,.thread .tmenu:focus-visible{opacity:1}
+.thread .tmenu:hover{background:var(--surface-container-highest)}
+.thread.active .tmenu{color:var(--on-primary-container)}
+.threadmenu{position:absolute;top:38px;right:4px;z-index:30;background:var(--surface);border-radius:12px;box-shadow:0 6px 20px rgba(28,20,60,.18);padding:4px;min-width:132px}
+.threadmenu button{display:flex;align-items:center;gap:8px;width:100%;height:36px;padding:0 12px;border:none;background:transparent;border-radius:8px;font-size:13.5px;color:var(--on-surface-var);text-align:left}
+.threadmenu button:hover{background:var(--surface-1)}
+.threadmenu button.danger{color:var(--red)}
+.threadmenu button.danger .material-symbols-outlined{color:var(--red);font-size:17px}
 
 /* content card: floats out of the chrome via tone + rounded top-left + soft shadow (no line) */
 .chat{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--surface);

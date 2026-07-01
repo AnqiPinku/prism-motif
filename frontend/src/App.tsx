@@ -3,9 +3,12 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import {
-  getJSON, streamChat, respondPermission, uploadAudio, inTauri,
+  getJSON, postJSON, streamChat, respondPermission, uploadAudio, inTauri,
   type State, type ReaperStatus, type ChatEvent,
 } from './api'
+
+// 历史标题里可能截进附件行（旧存档），显示前清掉
+const cleanTitle = (s: string) => s.replace(/\[音频文件:[^\]]*\]?/g, '').trim()
 import Settings, { type SettingsData } from './Settings'
 import Onboarding from './Onboarding'
 
@@ -248,6 +251,17 @@ export default function App() {
 
   const newChat = () => { setThreadId(null); setMsgs([]) }
 
+  // 线程行 ⋯ 菜单：两段式删除确认（WebView2 的原生 confirm 不可靠，不用）
+  const [menuFor, setMenuFor] = useState<string | null>(null)
+  const [confirmDel, setConfirmDel] = useState(false)
+  const openMenu = (id: string | null) => { setMenuFor(id); setConfirmDel(false) }
+  const delThread = async (id: string) => {
+    await postJSON('/api/threads/delete', { id })
+    openMenu(null)
+    if (threadId === id) newChat()
+    loadState()
+  }
+
   const geminiOk = !!settings?.gemini?.has_key
   const perceptionOn = !!state?.mcp.find((m) => m.name === 'music-perception')?.enabled
   const reaperOk = reaper?.state === 'connected'
@@ -331,9 +345,23 @@ export default function App() {
           <button className="newchat" onClick={newChat}><I n="add" />新对话</button>
           <div className="navlabel">最近</div>
           {(state?.threads || []).slice().reverse().map((t) => (
-            <button key={t.id} className={'thread' + (t.id === threadId ? ' active' : '')} onClick={() => openThread(t.id)}>
-              <I n="chat_bubble" s={20} /><span className="t">{t.title || t.id}</span>
-            </button>
+            <div key={t.id} className={'thread' + (t.id === threadId ? ' active' : '')}>
+              <button className="topen" onClick={() => openThread(t.id)}>
+                <I n="chat_bubble" s={20} /><span className="t">{cleanTitle(t.title || '') || t.id}</span>
+              </button>
+              <button className="tmenu" aria-label="对话选项"
+                onClick={(e) => { e.stopPropagation(); openMenu(menuFor === t.id ? null : t.id) }}>
+                <I n="more_horiz" s={18} />
+              </button>
+              {menuFor === t.id && (
+                <div className="threadmenu" onMouseLeave={() => openMenu(null)}>
+                  <button className="danger"
+                    onClick={() => (confirmDel ? delThread(t.id) : setConfirmDel(true))}>
+                    <I n="delete" s={17} />{confirmDel ? '确认删除？' : '删除'}
+                  </button>
+                </div>
+              )}
+            </div>
           ))}
         </aside>
 

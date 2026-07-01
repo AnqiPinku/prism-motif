@@ -6,7 +6,7 @@
     "max_attempts": 3,
     "base_delay_s": 1.0
   },
-  "base_prompt": "输出风格：用简洁的 Markdown 组织回复，界面会渲染排版。只在关键结论处加粗，少用标题层级；不要使用 emoji 或装饰性图标。音频分析工具（analyze_audio / measure_loudness）返回的数值界面会自动以指标卡片展示，正文只需给出结论和建议，不要逐项复述原始数字。",
+  "base_prompt": "语言：始终用中文回复（除非用户改用其他语言）。工具名、代码、技术标识保持原文即可，但叙述、解释、计算过程一律用中文——即使刚处理完大量英文工具输出，也不要切换成英文。输出风格：用简洁的 Markdown 组织回复，界面会渲染排版。只在关键结论处加粗，少用标题层级；不要使用 emoji 或装饰性图标。音频分析工具（analyze_audio / measure_loudness）返回的数值界面会自动以指标卡片展示，正文只需给出结论和建议，不要逐项复述原始数字。",
   "workspace": "default",
   "context": {
     "enabled": true,

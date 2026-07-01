@@ -32,8 +32,15 @@ def save_thread(threads_dir, thread_id, config, messages):
     if not title:
         for m in messages:
             if m.role == "user" and isinstance(m.content, str):
-                title = m.content[:30]
-                break
+                # 附件行（[音频文件: 路径]）不进标题，只取用户真正说的话
+                lines = [ln for ln in m.content.splitlines()
+                         if ln.strip() and not ln.startswith("[音频文件:")]
+                text = " ".join(lines).strip()
+                if text:
+                    title = text[:30]
+                    break
+        if not title:
+            title = "音频对话"
     data = {"id": thread_id, "title": title, "config": config,
             "messages": _serialize(messages)}
     with open(path, "w", encoding="utf-8") as f:
