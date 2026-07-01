@@ -10,8 +10,9 @@ const I = ({ n, s }: { n: string; s?: number }) => (
   <span className="material-symbols-outlined" style={s ? { fontSize: s } : undefined} aria-hidden>{n}</span>
 )
 
+type Chip = { kind: 'chip'; tone: 'ok' | 'err' | 'run'; label: string; detail?: string }
 type Item =
-  | { kind: 'chip'; tone: 'ok' | 'err' | 'run'; label: string }
+  | Chip
   | { kind: 'trace'; text: string }
   | { kind: 'perm'; id: string; label: string; decided?: string }
 type Msg = { role: 'user' | 'assistant'; text: string; items: Item[] }
@@ -76,7 +77,10 @@ export default function App() {
         const items = [...m.items]
         for (let i = items.length - 1; i >= 0; i--) {
           const it = items[i]
-          if (it.kind === 'chip' && it.tone === 'run') { items[i] = { ...it, tone: e.is_error ? 'err' : 'ok' }; break }
+          if (it.kind === 'chip' && it.tone === 'run') {
+            items[i] = { ...it, tone: e.is_error ? 'err' : 'ok', detail: (e.content || '').trim() }
+            break
+          }
         }
         return { ...m, items }
       })
@@ -213,7 +217,8 @@ export default function App() {
                       <div className="ava"><I n="graphic_eq" s={18} /></div>
                       <div className="abody">
                         {m.text && <div className="atext">{m.text}</div>}
-                        {m.items.map((it, j) => <Rendered key={j} it={it} onDecide={decide} />)}
+                        <ToolBar chips={m.items.filter((it): it is Chip => it.kind === 'chip')} />
+                        {m.items.filter((it) => it.kind !== 'chip').map((it, j) => <Rendered key={j} it={it} onDecide={decide} />)}
                       </div>
                     </div>
                   ),
@@ -235,6 +240,33 @@ export default function App() {
           onDone={() => { localStorage.setItem('pm_onboarded', '1'); setOnboarding(false); loadSettings() }} />
       )}
     </div>
+  )
+}
+
+// Collapsed-by-default bar of tool calls; expand to see each tool's result/error.
+function ToolBar({ chips }: { chips: Chip[] }) {
+  if (chips.length === 0) return null
+  const fails = chips.filter((c) => c.tone === 'err').length
+  const running = chips.some((c) => c.tone === 'run')
+  const icon = (t: Chip['tone']) => (t === 'ok' ? 'check_circle' : t === 'err' ? 'cancel' : 'progress_activity')
+  return (
+    <details className="toolbar">
+      <summary>
+        <I n="build" s={16} />
+        <span>工具 · {chips.length}</span>
+        {fails > 0 && <span className="tf">{fails} 失败</span>}
+        {running && <span className="tr">运行中…</span>}
+        <I n="expand_more" s={18} />
+      </summary>
+      <div className="toollist">
+        {chips.map((c, i) => (
+          <div className="toolrow" key={i}>
+            <span className={'chip ' + c.tone}><I n={icon(c.tone)} s={16} />{c.label}</span>
+            {c.detail && <pre className="tooldetail">{c.detail.length > 700 ? c.detail.slice(0, 700) + ' …' : c.detail}</pre>}
+          </div>
+        ))}
+      </div>
+    </details>
   )
 }
 
