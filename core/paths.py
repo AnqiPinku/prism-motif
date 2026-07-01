@@ -73,3 +73,14 @@ def expand(value):
     if not isinstance(value, str):
         return value
     return os.path.expandvars(value).replace("${PRISM_HOME}", str(PRISM_HOME))
+
+
+def numba_cache_dir():
+    """感知 sidecar 的 numba JIT 磁盘缓存目录。钉在版本无关的 per-user 位置，
+    这样那次一次性 ~16s 编译只发生一次、且能跨 app 更新保留（不随安装目录被清）。"""
+    if os.name == "nt":
+        base = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
+    else:
+        base = os.environ.get("XDG_CACHE_HOME") or os.path.join(
+            os.path.expanduser("~"), ".cache")
+    return os.path.join(base, "PrismCore", "numba-cache")
