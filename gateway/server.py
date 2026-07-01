@@ -93,6 +93,8 @@ class Handler(BaseHTTPRequestHandler):
     # ---------- POST ----------
     def do_POST(self):
         path = self.path.split("?")[0]
+        if path == "/api/upload":           # 原始字节流，须在 JSON 解析之前拦截
+            return self._upload()
         body = self._read_body()
         if path == "/api/chat":
             return self._chat(body)
@@ -137,6 +139,39 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/workspace/delete":
             return self._json(self._ws_call(runner.delete_workspace, body.get("name")))
         return self._json({"error": "not found"}, 404)
+
+    def _upload(self):
+        """聊天里附音频：收原始字节流存进受管临时目录，返回本机路径给 agent 用。
+        文件名走 X-Filename（URL 编码）；目录只留最近 20 个文件，不会积累。"""
+        import glob
+        import re
+        import tempfile
+        import urllib.parse
+        length = int(self.headers.get("Content-Length") or 0)
+        if not 0 < length <= 200 * 1024 * 1024:
+            return self._json({"error": "文件为空或超过 200MB"}, 400)
+        raw = urllib.parse.unquote(self.headers.get("X-Filename") or "audio.wav")
+        name = re.sub(r"[^\w.\-一-鿿]+", "_", os.path.basename(raw))[-80:] or "audio.wav"
+        updir = os.path.join(tempfile.gettempdir(), "prism-uploads")
+        os.makedirs(updir, exist_ok=True)
+        # 每次上传一个唯一子目录，文件保留原名（显示干净）；只留最近 20 次
+        import shutil
+        old = sorted(glob.glob(os.path.join(updir, "*")), key=os.path.getmtime)
+        for p in old[:-19]:
+            try:
+                shutil.rmtree(p) if os.path.isdir(p) else os.remove(p)
+            except OSError:
+                pass
+        dest = os.path.join(tempfile.mkdtemp(prefix="u", dir=updir), name)
+        with open(dest, "wb") as f:
+            remaining = length
+            while remaining > 0:
+                chunk = self.rfile.read(min(65536, remaining))
+                if not chunk:
+                    break
+                f.write(chunk)
+                remaining -= len(chunk)
+        return self._json({"path": dest})
 
     # ---------- helpers ----------
     def _read_body(self):
