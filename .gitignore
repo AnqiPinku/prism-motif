@@ -11,3 +11,4 @@ __pycache__/
 /web/favicon.svg
 /web/icons.svg
 /web/vite.svg
+/numba-cache/
