@@ -266,7 +266,9 @@ finally:
     _oc.urllib.request.urlopen = _orig
 
 print("C. MCP 客户端连通（真 reaper-mcp，不需 REAPER 打开）")
-server = "A:/Prismcode/reaper-mcp/server/reaper_mcp_server.py"
+# 兄弟仓：与 music-agent 同级（= PRISM_HOME）。从本文件位置推导，不硬编码盘符。
+_prism_home = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+server = os.path.join(_prism_home, "reaper-mcp", "server", "reaper_mcp_server.py")
 if os.path.exists(server):
     hub = ToolHub([{"name": "reaper", "command": sys.executable, "args": [server]}])
     try:

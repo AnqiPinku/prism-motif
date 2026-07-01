@@ -3,7 +3,6 @@ import os
 import json
 import time
 import shutil
-from pathlib import Path
 
 from .contracts import Message
 from .reasoners.openai_compat import OpenAICompatReasoner
@@ -15,10 +14,11 @@ from .loop import AgentLoop
 from .compaction import (CompactingReasoner, estimate_tokens,
                          recent_cut, summarize_messages)
 from . import threads as threads_mod
+from . import paths
 
-ROOT = Path(__file__).resolve().parent.parent
-CONFIG = ROOT / "config"
-DATA = ROOT / "data"
+paths.ensure_seeded()   # 打包后首启把配置模板+内置技能拷进可写目录（源码就地运行为 no-op）
+CONFIG = paths.CONFIG_DIR
+DATA = paths.DATA_DIR
 
 # 中性最小底座：不预设身份/领域，干净。身份交给用户启用的人格技能。
 # 可在 config/settings.json 的 "base_prompt" 覆盖，设为 "" 则完全无底座。
@@ -74,7 +74,7 @@ def _memory_base_dir():
     cfg = _load_json(CONFIG / "memory.json",
                      {"backend": "json", "options": {"dir": "data/memory"}})
     d = (cfg.get("options") or {}).get("dir", "data/memory")
-    return d if os.path.isabs(d) else str(ROOT / d)
+    return d if os.path.isabs(d) else str(paths.DATA_ROOT / d)
 
 
 def _build_memory(workspace="default"):

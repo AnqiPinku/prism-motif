@@ -14,14 +14,15 @@ sys.path.insert(0, str(ROOT))
 
 from urllib.parse import urlparse, parse_qs              # noqa: E402
 from core import runner                                  # noqa: E402
+from core import paths                                   # noqa: E402
 from core.skills import (load_skills, add_skill, delete_skill,  # noqa: E402
                          load_enabled_map, set_enabled)
 from core.mcp_client import MCPClient                    # noqa: E402
 from core import threads as threads_mod                  # noqa: E402
 
-WEB = ROOT / "web"
-CONFIG = ROOT / "config"
-DATA = ROOT / "data"
+WEB = ROOT / "web"                                       # 静态资源随代码走，只读即可
+CONFIG = paths.CONFIG_DIR                                # 可写状态：per-user 目录（发布）/ 就地（开发）
+DATA = paths.DATA_DIR
 
 CTYPES = {".html": "text/html", ".js": "application/javascript",
           ".css": "text/css", ".json": "application/json", ".svg": "image/svg+xml"}
