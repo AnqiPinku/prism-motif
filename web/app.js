@@ -404,7 +404,18 @@ async function openSettings() {
   });
   pick.value = settingsData.default;
   fillProviderFields(settingsData.default);
+  fillGeminiFields();
   $("settings-modal").classList.remove("hidden");
+}
+
+function fillGeminiFields() {
+  const g = settingsData.gemini || {};
+  $("gem-baseurl").value = g.base_url || "";
+  $("gem-model").value = g.model || "";
+  $("gem-key").value = "";
+  $("gem-keystatus").textContent = g.has_key ? "（已设置，留空则保留）" : "（未设置）";
+  // 旧 setx 环境变量里有、钥匙链里没有 → 提示一键迁移
+  $("gem-import").style.display = g.env_only ? "inline-block" : "none";
 }
 
 // 上下文预算档位（跨数量级，滑轨吸附到这些标准值；含各模型默认值）
@@ -448,13 +459,24 @@ $("set-save").onclick = async () => {
   payload.window_tokens = WINDOW_STOPS[+$("set-window").value];
   const key = $("set-key").value.trim();
   if (key) payload.api_key = key;
-  await fetch("/api/settings", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
+  // Gemini / 感知：base_url/model 总是回写；key 仅在填了时更新
+  const gem = { base_url: $("gem-baseurl").value.trim(), model: $("gem-model").value.trim() };
+  const gkey = $("gem-key").value.trim();
+  if (gkey) gem.api_key = gkey;
+  payload.gemini = gem;
+  const r = await postJSON("/api/settings", payload).then((x) => x.json());
+  if (r && r.ok === false) { alert(r.error || "保存失败"); return; }
   $("settings-modal").classList.add("hidden");
   loadState();
+};
+
+// 从旧 setx 环境变量把 Gemini key 一键导入钥匙链
+$("gem-import").onclick = async () => {
+  const r = await postJSON("/api/settings", { gemini: { import_env: true } }).then((x) => x.json());
+  if (r && r.ok === false) { alert(r.error || "导入失败"); return; }
+  alert("已导入到系统钥匙链。请删除旧的 GEMINI_API_KEY 环境变量（setx GEMINI_API_KEY \"\"）并轮换该 key。");
+  settingsData = await fetch("/api/settings").then((x) => x.json());
+  fillGeminiFields();
 };
 
 // workspace（= 长期记忆命名空间；只管记忆，不打包技能/MCP/模型）

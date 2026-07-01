@@ -15,6 +15,7 @@ sys.path.insert(0, str(ROOT))
 from urllib.parse import urlparse, parse_qs              # noqa: E402
 from core import runner                                  # noqa: E402
 from core import paths                                   # noqa: E402
+from core import secrets_store                            # noqa: E402
 from core.skills import (load_skills, add_skill, delete_skill,  # noqa: E402
                          load_enabled_map, set_enabled)
 from core.mcp_client import MCPClient                    # noqa: E402
@@ -223,14 +224,34 @@ class Handler(BaseHTTPRequestHandler):
         out = {"default": prov.get("default"), "providers": {}}
         for name, p in prov.get("providers", {}).items():
             env_set = bool(p.get("api_key_env") and os.environ.get(p.get("api_key_env")))
+            # has_key 覆盖钥匙链 + 旧 secrets.json + 环境变量；绝不回传 key 本身
             out["providers"][name] = {
                 "base_url": p.get("base_url", ""),
                 "model": p.get("model", ""),
                 "type": p.get("type", ""),
                 "window_tokens": p.get("window_tokens", ""),
-                "has_key": bool(secrets.get(name)) or env_set,
+                "has_key": secrets_store.has_secret(name) or bool(secrets.get(name)) or env_set,
             }
+        # Gemini / 感知（音频分析）：非密钥的 base_url/model 存 mcp_servers.json 的 perception env
+        mcp = load_json(CONFIG / "mcp_servers.json", {"servers": []})
+        perc = next((s for s in mcp.get("servers", []) if s.get("name") == "music-perception"), {})
+        penv = perc.get("env", {}) or {}
+        out["gemini"] = {
+            "base_url": penv.get("GEMINI_BASE_URL", ""),
+            "model": penv.get("GEMINI_MODEL", ""),
+            "has_key": secrets_store.has_secret("GEMINI_API_KEY") or bool(os.environ.get("GEMINI_API_KEY")),
+            "env_only": secrets_store.env_only("GEMINI_API_KEY"),   # 提示从旧 setx 迁移
+        }
         return out
+
+    def _update_perception_env(self, updates):
+        """把非密钥的 GEMINI_BASE_URL/GEMINI_MODEL 写进 mcp_servers.json 的 perception env。"""
+        cfg = load_json(CONFIG / "mcp_servers.json", {"servers": []})
+        for s in cfg.get("servers", []):
+            if s.get("name") == "music-perception":
+                s.setdefault("env", {}).update(updates)
+        (CONFIG / "mcp_servers.json").write_text(
+            json.dumps(cfg, ensure_ascii=False, indent=2), encoding="utf-8")
 
     def _settings_save(self, body):
         prov = load_json(CONFIG / "providers.json", {"default": "deepseek", "providers": {}})
@@ -250,11 +271,26 @@ class Handler(BaseHTTPRequestHandler):
                     pass
         (CONFIG / "providers.json").write_text(
             json.dumps(prov, ensure_ascii=False, indent=2), encoding="utf-8")
-        if name and body.get("api_key"):
-            secrets = load_json(CONFIG / "secrets.json", {})
-            secrets[name] = body["api_key"]
-            (CONFIG / "secrets.json").write_text(
-                json.dumps(secrets, ensure_ascii=False, indent=2), encoding="utf-8")
+        # 密钥一律进系统钥匙链，绝不落 secrets.json（明文）
+        try:
+            if name and body.get("api_key"):
+                secrets_store.set_secret(name, body["api_key"])
+            g = body.get("gemini") or {}
+            updates = {}
+            if "base_url" in g:
+                updates["GEMINI_BASE_URL"] = g["base_url"]
+            if "model" in g:
+                updates["GEMINI_MODEL"] = g["model"]
+            if updates:
+                self._update_perception_env(updates)
+            if g.get("import_env"):          # 从旧 setx 环境变量一键导入钥匙链
+                v = os.environ.get("GEMINI_API_KEY")
+                if v:
+                    secrets_store.set_secret("GEMINI_API_KEY", v)
+            elif g.get("api_key"):
+                secrets_store.set_secret("GEMINI_API_KEY", g["api_key"])
+        except Exception as e:  # noqa: BLE001 钥匙链后端不可用/写失败 → 明确报错，不 500
+            return {"ok": False, "error": "密钥保存失败：%s" % e}
         return {"ok": True}
 
     def _ws_set(self, name):
