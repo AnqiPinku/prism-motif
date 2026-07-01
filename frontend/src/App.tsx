@@ -3,6 +3,8 @@ import {
   getJSON, streamChat, respondPermission,
   type State, type ReaperStatus, type ChatEvent,
 } from './api'
+import Settings, { type SettingsData } from './Settings'
+import Onboarding from './Onboarding'
 
 const I = ({ n, s }: { n: string; s?: number }) => (
   <span className="material-symbols-outlined" style={s ? { fontSize: s } : undefined} aria-hidden>{n}</span>
@@ -17,7 +19,7 @@ type Msg = { role: 'user' | 'assistant'; text: string; items: Item[] }
 export default function App() {
   const [state, setState] = useState<State | null>(null)
   const [reaper, setReaper] = useState<ReaperStatus | null>(null)
-  const [gemini, setGemini] = useState<{ has_key?: boolean }>({})
+  const [settings, setSettings] = useState<SettingsData | null>(null)
   const [provider, setProvider] = useState('')
   const [threadId, setThreadId] = useState<string | null>(null)
   const [msgs, setMsgs] = useState<Msg[]>([])
@@ -25,6 +27,8 @@ export default function App() {
   const [sending, setSending] = useState(false)
   const [bypass, setBypass] = useState(false)
   const [statusOpen, setStatusOpen] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [onboarding, setOnboarding] = useState(false)
   const abort = useRef<AbortController | null>(null)
   const msgsRef = useRef<HTMLDivElement>(null)
 
@@ -36,14 +40,22 @@ export default function App() {
   const loadReaper = useCallback(async () => {
     try { setReaper(await getJSON<ReaperStatus>('/api/reaper/status')) } catch { /* ignore */ }
   }, [])
+  const loadSettings = useCallback(async () => {
+    const s = await getJSON<SettingsData>('/api/settings')
+    setSettings(s)
+    return s
+  }, [])
 
   useEffect(() => {
     loadState()
     loadReaper()
-    getJSON<{ gemini?: { has_key?: boolean } }>('/api/settings').then((s) => setGemini(s.gemini || {}))
+    loadSettings().then((s) => {
+      const configured = Object.values(s.providers || {}).some((p) => p.has_key) || s.gemini?.has_key
+      if (!configured && !localStorage.getItem('pm_onboarded')) setOnboarding(true)
+    })
     const t = setInterval(loadReaper, 5000)
     return () => clearInterval(t)
-  }, [loadState, loadReaper])
+  }, [loadState, loadReaper, loadSettings])
 
   useEffect(() => {
     const el = msgsRef.current
@@ -115,11 +127,34 @@ export default function App() {
 
   const newChat = () => { setThreadId(null); setMsgs([]) }
 
-  const geminiOk = !!gemini.has_key
+  const geminiOk = !!settings?.gemini?.has_key
   const perceptionOn = !!state?.mcp.find((m) => m.name === 'music-perception')?.enabled
   const reaperOk = reaper?.state === 'connected'
   const allReady = geminiOk && perceptionOn && reaperOk
   const ready = (ok: boolean) => (ok ? 'var(--green)' : 'var(--amber)')
+
+  const composer = (
+    <div className="cbox">
+      <button className="iconbtn" aria-label="添加"><I n="add" /></button>
+      <textarea
+        rows={1} value={input} placeholder="想写点什么？让 Prism 帮你作曲、编曲、混音…"
+        onChange={(e) => setInput(e.target.value)}
+        onInput={(e) => { const t = e.currentTarget; t.style.height = 'auto'; t.style.height = Math.min(t.scrollHeight, 140) + 'px' }}
+        onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() } }}
+      />
+      <label className="bypass"><input type="checkbox" checked={bypass} onChange={(e) => setBypass(e.target.checked)} />绕过确认</label>
+      <span className="modelchip">
+        <I n="bolt" s={16} />
+        <select value={provider} onChange={(e) => setProvider(e.target.value)}>
+          {(state?.providers.names || []).map((n) => <option key={n} value={n}>{n}</option>)}
+        </select>
+      </span>
+      <button className="fab" aria-label={sending ? '停止' : '发送'} disabled={!sending && !input.trim()}
+        onClick={() => (sending ? abort.current?.abort() : send())}>
+        <I n={sending ? 'stop' : 'arrow_upward'} />
+      </button>
+    </div>
+  )
 
   return (
     <div className="app">
@@ -144,7 +179,7 @@ export default function App() {
             </div>
           )}
         </div>
-        <button className="iconbtn" aria-label="设置"><I n="settings" /></button>
+        <button className="iconbtn" aria-label="设置" onClick={() => setSettingsOpen(true)}><I n="settings" /></button>
         <span className="avatar">科</span>
       </header>
 
@@ -161,51 +196,43 @@ export default function App() {
         </aside>
 
         <main className="chat">
-          <div className="msgs" ref={msgsRef}>
-            {msgs.length === 0 && (
-              <div className="empty">
-                <div className="big">𝄞</div>
-                <p>想写点什么？让 Prism 帮你作曲、编曲、混音。</p>
-              </div>
-            )}
-            {msgs.map((m, i) =>
-              m.role === 'user' ? (
-                <div key={i} className="u">{m.text}</div>
-              ) : (
-                <div key={i} className="a">
-                  <div className="ava"><I n="graphic_eq" s={18} /></div>
-                  <div className="abody">
-                    {m.text && <div className="atext">{m.text}</div>}
-                    {m.items.map((it, j) => <Rendered key={j} it={it} onDecide={decide} />)}
-                  </div>
-                </div>
-              ),
-            )}
-          </div>
-          <div className="composer">
-            <div className="cbox">
-              <button className="iconbtn" aria-label="添加"><I n="add" /></button>
-              <textarea
-                rows={1} value={input} placeholder="想写点什么？让 Prism 帮你作曲、编曲、混音…"
-                onChange={(e) => setInput(e.target.value)}
-                onInput={(e) => { const t = e.currentTarget; t.style.height = 'auto'; t.style.height = Math.min(t.scrollHeight, 140) + 'px' }}
-                onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() } }}
-              />
-              <label className="bypass"><input type="checkbox" checked={bypass} onChange={(e) => setBypass(e.target.checked)} />绕过确认</label>
-              <span className="modelchip">
-                <I n="bolt" s={16} />
-                <select value={provider} onChange={(e) => setProvider(e.target.value)}>
-                  {(state?.providers.names || []).map((n) => <option key={n} value={n}>{n}</option>)}
-                </select>
-              </span>
-              <button className="fab" aria-label={sending ? '停止' : '发送'} disabled={!sending && !input.trim()}
-                onClick={() => (sending ? abort.current?.abort() : send())}>
-                {sending ? <I n="stop" /> : <span className="clef">𝄞</span>}
-              </button>
+          {msgs.length === 0 ? (
+            <div className="hero">
+              <div className="greet">今天想创作点什么？</div>
+              <div className="sub">作曲、编曲、混音，说一句就行。</div>
+              <div className="cwrap">{composer}</div>
             </div>
-          </div>
+          ) : (
+            <>
+              <div className="msgs" ref={msgsRef}>
+                {msgs.map((m, i) =>
+                  m.role === 'user' ? (
+                    <div key={i} className="u">{m.text}</div>
+                  ) : (
+                    <div key={i} className="a">
+                      <div className="ava"><I n="graphic_eq" s={18} /></div>
+                      <div className="abody">
+                        {m.text && <div className="atext">{m.text}</div>}
+                        {m.items.map((it, j) => <Rendered key={j} it={it} onDecide={decide} />)}
+                      </div>
+                    </div>
+                  ),
+                )}
+              </div>
+              <div className="composer">{composer}</div>
+            </>
+          )}
         </main>
       </div>
+
+      {settingsOpen && state && (
+        <Settings state={state} onClose={() => setSettingsOpen(false)}
+          onSaved={() => { loadState(); loadSettings() }} />
+      )}
+      {onboarding && (
+        <Onboarding reaper={reaper} onReaperRefresh={loadReaper}
+          onDone={() => { localStorage.setItem('pm_onboarded', '1'); setOnboarding(false); loadSettings() }} />
+      )}
     </div>
   )
 }
