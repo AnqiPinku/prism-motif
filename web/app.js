@@ -479,6 +479,49 @@ $("gem-import").onclick = async () => {
   fillGeminiFields();
 };
 
+// REAPER 桥：状态检测 + 一键安装（后台服务对用户隐形，这里只呈现"连没连上"）
+let reaperPolling = false;
+async function loadReaperStatus() {
+  if (reaperPolling) return;
+  reaperPolling = true;
+  try {
+    const s = await fetch("/api/reaper/status").then((r) => r.json());
+    renderReaper(s);
+  } catch (_) { /* 网络抖动忽略 */ } finally { reaperPolling = false; }
+}
+function renderReaper(s) {
+  const dot = $("reaper-dot"), text = $("reaper-text"), btn = $("reaper-install");
+  const MAP = {
+    connected: ["#1f9d57", "已连接"],
+    running_not_loaded: ["#e0a400", "桥未加载 — 装桥后重启 REAPER"],
+    not_running: ["#9b998f", "REAPER 未运行"],
+    not_loaded: ["#e0a400", "未连接（REAPER 未开或桥未加载）"],
+  };
+  const [color, label] = MAP[s.state] || ["#9b998f", s.error || "未知"];
+  // 连上但磁盘上的桥不是当前版（旧桥仍在跑，ping 分不清新旧）→ 琥珀提醒更新
+  const stale = s.installed && !s.installed_current;
+  dot.style.background = (s.state === "connected" && stale) ? "#e0a400" : color;
+  text.textContent = label + (stale ? "（桥有更新，装后重启 REAPER）" : "");
+  // 只有"已连接且是当前版"才隐藏按钮；连上但旧也要能更新
+  const ok = s.state === "connected" && !stale;
+  btn.style.display = ok ? "none" : "block";
+  btn.textContent = s.installed ? "重装 / 更新桥" : "一键安装桥";
+}
+$("reaper-refresh").onclick = loadReaperStatus;
+$("reaper-install").onclick = async () => {
+  const btn = $("reaper-install");
+  btn.disabled = true; btn.textContent = "安装中…";
+  try {
+    const r = await postJSON("/api/reaper/install-bridge", {}).then((x) => x.json());
+    if (r.ok === false) { alert(r.error || "安装失败"); return; }
+    alert("已安装：\n- " + (r.actions || []).join("\n- ") +
+      "\n\n请重启 REAPER 让自动加载生效（或在 REAPER 里 Actions > Load ReaScript 手动加载一次）。");
+  } finally {
+    btn.disabled = false;
+    loadReaperStatus();
+  }
+};
+
 // workspace（= 长期记忆命名空间；只管记忆，不打包技能/MCP/模型）
 $("ws-select").onchange = async function () {
   await postJSON("/api/workspace/switch", { name: this.value });
@@ -508,3 +551,5 @@ $("ws-del").onclick = async () => {
 };
 
 loadState();
+loadReaperStatus();
+setInterval(loadReaperStatus, 5000);   // 后台轮询：REAPER 开/关、桥加载状态实时反映
