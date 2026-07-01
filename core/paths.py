@@ -3,7 +3,7 @@
 目标：同一套代码既能在源码树里原地跑(开发)，又能装进只读目录、把 config/data 写到
 per-user 目录(发布)。桌面壳/启动器负责用环境变量告诉后端可写目录在哪。
 
-- INSTALL_ROOT : music-agent 仓根 —— 随 app 分发的代码 + web/ + 配置模板 + 内置技能。只读。
+- INSTALL_ROOT : prism-motif 仓根 —— 随 app 分发的代码 + web/ + 配置模板 + 内置技能。只读。
 - PRISM_HOME   : 四个仓的公共父目录(默认 A:/Prismcode)。用于展开 mcp_servers.json 里的
                  "${PRISM_HOME}/.../server.py" 令牌，替掉硬编码盘符路径。启动器可用环境变量覆盖。
 - DATA_ROOT    : 可写状态根。优先 PRISM_DATA_DIR；冻结(sys.frozen)时用 per-user OS 目录；
@@ -15,7 +15,7 @@ import sys
 import shutil
 from pathlib import Path
 
-INSTALL_ROOT = Path(__file__).resolve().parents[1]        # .../music-agent
+INSTALL_ROOT = Path(__file__).resolve().parents[1]        # .../prism-motif
 
 # 四仓公共父目录：展开 ${PRISM_HOME} 用。写回 os.environ 供 expandvars + 子进程继承。
 PRISM_HOME = Path(os.environ.get("PRISM_HOME") or str(INSTALL_ROOT.parent)).resolve()
@@ -25,10 +25,10 @@ os.environ["PRISM_HOME"] = str(PRISM_HOME)
 def _user_data_root():
     if os.name == "nt":
         base = os.environ.get("APPDATA") or os.path.expanduser("~")
-        return Path(base) / "PrismMusicAgent"
+        return Path(base) / "PrismMotif"
     base = os.environ.get("XDG_DATA_HOME") or os.path.join(
         os.path.expanduser("~"), ".local", "share")
-    return Path(base) / "prism-music-agent"
+    return Path(base) / "prism-motif"
 
 
 def _resolve_data_root():

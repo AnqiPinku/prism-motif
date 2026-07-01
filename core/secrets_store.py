@@ -1,14 +1,14 @@
 """密钥存储：包一层 `keyring`（Windows 凭据管理器 / macOS Keychain / Linux SecretService）。
 
 设计：
-- service 固定 'prism-music-agent'；每个密钥一个 username（如 'GEMINI_API_KEY' 或 provider 名）。
+- service 固定 'prism-motif'；每个密钥一个 username（如 'GEMINI_API_KEY' 或 provider 名）。
 - get 只查钥匙链，缺失/后端不可用返回 None —— precedence（env vs 钥匙链）由调用方决定，这里不碰环境变量。
 - 只有 gateway/kernel 进程用它；perception sidecar 仍只读 os.environ（密钥由 mcp_client 在 spawn 时注入）。
 - keyring 懒加载：没装/后端不可用也不 crash 启动（读返回 None，写把异常上抛让 UI 报"保存失败"）。
 """
 import os
 
-SERVICE = "prism-music-agent"
+SERVICE = "prism-motif"
 
 
 def _kr():
