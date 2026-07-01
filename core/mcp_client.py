@@ -55,6 +55,8 @@ class MCPClient:
             stdin=subprocess.PIPE, stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL, text=True, encoding="utf-8",
             bufsize=1, env=full_env,
+            # 无窗壳（release Tauri）下父进程没有控制台，console 子进程会各弹一个黑窗 → 显式禁掉
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0,
         )
         # 后台读线程：把 stdout 逐行塞进队列，让 _rpc 能带超时地等响应（Windows 管道无法 select）。
         self._q = queue.Queue()
