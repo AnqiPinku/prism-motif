@@ -210,6 +210,17 @@ select{height:30px;border:1px solid var(--border);border-radius:8px;background:v
     <div class="muted" style="font-size:11px;margin-top:-3px">圆环分母 · 留质量余量，非模型硬上限</div>
     <label>API Key <span id="set-keystatus" class="muted"></span></label>
     <input id="set-key" type="password" placeholder="粘贴 key（留空 = 不修改）">
+
+    <div style="border-top:1px solid var(--border);margin:12px 0 2px"></div>
+    <h3 style="font-size:13px">Gemini / 感知（音频分析）</h3>
+    <label>API Key <span id="gem-keystatus" class="muted"></span></label>
+    <input id="gem-key" type="password" placeholder="粘贴音频分析 key（留空 = 不修改）">
+    <button id="gem-import" class="mini-btn" style="display:none;align-self:flex-start;margin-top:4px">从环境变量导入到钥匙链</button>
+    <label>Base URL <span class="muted" style="font-size:11px">（中转，留空 = Google 原生）</span></label>
+    <input id="gem-baseurl" placeholder="如 https://your-relay/v1">
+    <label>模型名称</label>
+    <input id="gem-model" placeholder="如 gemini-2.5-flash">
+
     <div class="modal-actions">
       <button id="set-cancel">取消</button>
       <button class="primary" id="set-save">保存</button>

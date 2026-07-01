@@ -1,0 +1,5 @@
+# music-agent 桌面 app 的 Python 运行时依赖（gateway + kernel）。全部 permissive，无需编译。
+# 注意：音频分析依赖（numpy/scipy/librosa/numba…）不在这里 —— 它们隔离在
+# music-perception-mcp，随冻结的 perception sidecar 分发，不污染主环境。
+openai>=1.40      # OpenAI 兼容"大脑"（DeepSeek / 中转 等）
+keyring>=24       # 系统钥匙链存 API key（Win 凭据管理器 / macOS Keychain / Linux SecretService）

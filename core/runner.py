@@ -15,6 +15,7 @@ from .compaction import (CompactingReasoner, estimate_tokens,
                          recent_cut, summarize_messages)
 from . import threads as threads_mod
 from . import paths
+from . import secrets_store
 
 paths.ensure_seeded()   # 打包后首启把配置模板+内置技能拷进可写目录（源码就地运行为 no-op）
 CONFIG = paths.CONFIG_DIR
@@ -49,9 +50,11 @@ def build_reasoner(provider=None):
     if p.get("type") == "mock":
         from .reasoners.mock import MockReasoner
         return MockReasoner(), name
-    # key 解析优先级：UI 存的 secrets.json → 环境变量
+    # key 解析优先级：系统钥匙链 → 旧 secrets.json（向后兼容）→ 环境变量
     secrets = _load_json(CONFIG / "secrets.json", {})
-    api_key = secrets.get(name) or os.environ.get(p.get("api_key_env", ""), "")
+    api_key = (secrets_store.get_secret(name)
+               or secrets.get(name)
+               or os.environ.get(p.get("api_key_env", ""), ""))
     reasoner = OpenAICompatReasoner(
         p["base_url"], p["model"], api_key,
         timeout=_settings().get("request_timeout_s", 120))
