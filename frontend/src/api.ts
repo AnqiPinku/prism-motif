@@ -83,3 +83,16 @@ export async function streamChat(
 
 export const respondPermission = (id: string, allow: boolean) =>
   postJSON('/api/permission', { id, allow })
+
+// 聊天附音频：传原始字节给 gateway，拿回本机路径（agent 的分析/转 MIDI 工具吃路径）。
+export async function uploadAudio(file: File): Promise<{ path?: string; error?: string }> {
+  const r = await fetch(API + '/api/upload', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/octet-stream',
+      'X-Filename': encodeURIComponent(file.name),
+    },
+    body: file,
+  })
+  return r.json()
+}

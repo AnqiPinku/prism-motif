@@ -3,7 +3,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import {
-  getJSON, streamChat, respondPermission, inTauri,
+  getJSON, streamChat, respondPermission, uploadAudio, inTauri,
   type State, type ReaperStatus, type ChatEvent,
 } from './api'
 import Settings, { type SettingsData } from './Settings'
@@ -70,6 +70,26 @@ export default function App() {
   const [onboarding, setOnboarding] = useState(false)
   const abort = useRef<AbortController | null>(null)
   const msgsRef = useRef<HTMLDivElement>(null)
+
+  // 聊天附音频：+ 号选文件 → 传给 gateway 落盘 → 显示为附件胶囊，路径发送时才拼进消息
+  const fileRef = useRef<HTMLInputElement>(null)
+  const [uploading, setUploading] = useState(false)
+  const [atts, setAtts] = useState<{ name: string; path: string }[]>([])
+  const onPickAudio = async (f?: File) => {
+    if (!f || uploading) return
+    setUploading(true)
+    try {
+      const r = await uploadAudio(f)
+      const p = r.path
+      if (p) setAtts((a) => [...a, { name: f.name, path: p }])
+      else alert('上传失败：' + (r.error || '未知错误'))
+    } catch (e) {
+      alert('上传失败：' + e)
+    } finally {
+      setUploading(false)
+      if (fileRef.current) fileRef.current.value = ''
+    }
+  }
 
   // Resizable sidebar — width persisted; delta-based pointer drag (handle sits outside the drag region).
   const [navW, setNavW] = useState<number>(() => {
@@ -162,9 +182,12 @@ export default function App() {
   }
 
   const send = async () => {
-    const goal = input.trim()
-    if (!goal || sending) return
+    const text = input.trim()
+    if ((!text && atts.length === 0) || sending) return
+    // 附件路径拼在指令后面（agent 的分析/转 MIDI 工具吃本机路径）
+    const goal = [text, ...atts.map((a) => `[音频文件: ${a.path}]`)].filter(Boolean).join('\n')
     setInput('')
+    setAtts([])
     setMsgs((m) => [...m, { role: 'user', text: goal, items: [] }, { role: 'assistant', text: '', items: [] }])
     setSending(true)
     abort.current = new AbortController()
@@ -232,8 +255,28 @@ export default function App() {
   const ready = (ok: boolean) => (ok ? 'var(--green)' : 'var(--amber)')
 
   const composer = (
-    <div className="cbox">
-      <button className="iconbtn" aria-label="添加"><I n="add" /></button>
+    <div>
+      {atts.length > 0 && (
+        <div className="attrow">
+          {atts.map((a, i) => (
+            <span className="attchip" key={i}>
+              <I n="music_note" s={16} />
+              <span className="an">{a.name}</span>
+              <button aria-label="移除附件" onClick={() => setAtts((x) => x.filter((_, j) => j !== i))}>
+                <I n="close" s={15} />
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+      <div className="cbox">
+      <input ref={fileRef} type="file" style={{ display: 'none' }}
+        accept="audio/*,.wav,.mp3,.flac,.ogg,.aif,.aiff,.m4a"
+        onChange={(e) => onPickAudio(e.target.files?.[0])} />
+      <button className="iconbtn" aria-label="添加音频" title="添加音频文件（分析 / 转 MIDI）"
+        onClick={() => fileRef.current?.click()}>
+        {uploading ? <span className="spinning"><I n="progress_activity" /></span> : <I n="add" />}
+      </button>
       <textarea
         rows={1} value={input} placeholder="描述你的音乐想法，交给 Prism…"
         onChange={(e) => setInput(e.target.value)}
@@ -246,10 +289,12 @@ export default function App() {
           {(state?.providers.names || []).map((n) => <option key={n} value={n}>{n}</option>)}
         </select>
       </span>
-      <button className="fab" aria-label={sending ? '停止' : '发送'} disabled={!sending && !input.trim()}
+      <button className="fab" aria-label={sending ? '停止' : '发送'}
+        disabled={!sending && !input.trim() && atts.length === 0}
         onClick={() => (sending ? abort.current?.abort() : send())}>
         <I n={sending ? 'stop' : 'arrow_upward'} />
       </button>
+      </div>
     </div>
   )
 
@@ -307,7 +352,7 @@ export default function App() {
               <div className="msgs" ref={msgsRef}>
                 {msgs.map((m, i) =>
                   m.role === 'user' ? (
-                    <div key={i} className="u">{m.text}</div>
+                    <UserBubble key={i} text={m.text} />
                   ) : (
                     <div key={i} className="a">
                       <div className="ava"><I n="graphic_eq" s={18} /></div>
@@ -343,6 +388,26 @@ export default function App() {
   )
 }
 
+// 用户气泡：把消息里的 [音频文件: path] 行渲染成附件胶囊（只显示文件名），正文照常。
+const AUD_LINE = /^\[音频文件: (.+)\]$/
+function UserBubble({ text }: { text: string }) {
+  const lines = text.split('\n')
+  const files = lines.map((l) => l.match(AUD_LINE)?.[1]).filter((p): p is string => !!p)
+  const rest = lines.filter((l) => !AUD_LINE.test(l)).join('\n')
+  return (
+    <div className="u">
+      {rest}
+      {files.length > 0 && (
+        <div className="uatts">
+          {files.map((p, i) => (
+            <span key={i} className="attchip small"><I n="music_note" s={14} />{p.split(/[\\/]/).pop()}</span>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // Custom window buttons (frameless Tauri window). Only rendered inside the shell.
 function WinControls() {
   const w = getCurrentWindow()
@@ -367,7 +432,7 @@ function ToolBar({ chips }: { chips: Chip[] }) {
   return (
     <details className="toolbar">
       <summary>
-        <I n="build" s={16} />
+        {running ? <span className="spinning"><I n="progress_activity" s={16} /></span> : <I n="build" s={16} />}
         <span className="tname">{cur.label}</span>
         {chips.length > 1 && <span className="tcount">{chips.length}</span>}
         {fails > 0 && <span className="tf">{fails} 失败</span>}
