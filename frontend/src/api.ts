@@ -30,13 +30,18 @@ export type ChatEvent =
   | { type: 'error'; message: string }
   | { type: 'done' }
 
+// In the Tauri shell the UI is served from tauri:// (bundled), so the gateway is a
+// cross-origin absolute URL; in a plain browser it's same-origin (relative).
+export const inTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
+const API = inTauri ? 'http://127.0.0.1:8770' : ''
+
 export async function getJSON<T>(url: string): Promise<T> {
-  const r = await fetch(url)
+  const r = await fetch(API + url)
   return r.json()
 }
 
 export async function postJSON<T = unknown>(url: string, body: unknown): Promise<T> {
-  const r = await fetch(url, {
+  const r = await fetch(API + url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
@@ -50,7 +55,7 @@ export async function streamChat(
   onEvent: (e: ChatEvent) => void,
   signal: AbortSignal,
 ): Promise<void> {
-  const res = await fetch('/api/chat', {
+  const res = await fetch(API + '/api/chat', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
