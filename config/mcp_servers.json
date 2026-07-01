@@ -5,7 +5,7 @@
       "enabled": true,
       "command": "python",
       "args": [
-        "A:/Prismcode/reaper-mcp/server/reaper_mcp_server.py"
+        "${PRISM_HOME}/reaper-mcp/server/reaper_mcp_server.py"
       ]
     },
     {
@@ -13,7 +13,7 @@
       "enabled": true,
       "command": "python",
       "args": [
-        "A:/Prismcode/music-perception-mcp/server/music_perception_server.py"
+        "${PRISM_HOME}/music-perception-mcp/server/music_perception_server.py"
       ],
       "comment": "listen_subjective needs GEMINI_API_KEY set in the OS env (NOT here — it would be committed). Relay base_url/model below are non-secret. Set: setx GEMINI_API_KEY sk-...",
       "env": {
@@ -26,7 +26,7 @@
       "enabled": false,
       "command": "python",
       "args": [
-        "A:/Prismcode/system-mcp/server.py"
+        "${PRISM_HOME}/system-mcp/server.py"
       ]
     }
   ]

@@ -8,6 +8,7 @@ import threading
 import subprocess
 
 from .contracts import ToolSpec, ToolResult
+from . import paths
 
 PROTOCOL_VERSION = "2024-11-05"
 
@@ -28,8 +29,14 @@ class MCPClient:
         full_env = dict(os.environ)
         if self.env:
             full_env.update(self.env)
+        command = paths.expand(self.command)          # 展开 ${PRISM_HOME} 令牌 → 绝对路径
+        args = [paths.expand(a) for a in self.args]
+        for a in args:   # 缺脚本会因 stderr=DEVNULL 静默失败 → 提前报清楚（安装不完整/兄弟仓缺失）
+            if a.endswith(".py") and not os.path.isfile(a):
+                raise RuntimeError(
+                    "MCP server 脚本不存在：%s（检查 ${PRISM_HOME} 或安装完整性）" % a)
         self.proc = subprocess.Popen(
-            [self.command, *self.args],
+            [command, *args],
             stdin=subprocess.PIPE, stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL, text=True, encoding="utf-8",
             bufsize=1, env=full_env,
