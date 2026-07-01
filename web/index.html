@@ -81,6 +81,7 @@ select{height:30px;border:1px solid var(--border);border-radius:8px;background:v
 .panel-head{display:flex;align-items:center;font-size:11px;font-weight:500;color:var(--faint);letter-spacing:.02em;margin-bottom:4px}
 .mini-btn{margin-left:auto;border:1px solid var(--border);background:var(--bg);border-radius:7px;font-size:11px;padding:3px 8px;color:var(--muted)}
 .row{display:flex;align-items:center;gap:8px;font-size:13px;padding:5px 2px}
+.dot{width:9px;height:9px;border-radius:50%;background:var(--faint);flex-shrink:0}
 .row .tag{margin-left:auto;font-size:10px;color:var(--faint)}
 .row .tag.full{color:var(--blue-text)}
 .cat{font-size:11px;color:var(--faint);margin:10px 0 2px 2px}
@@ -147,6 +148,11 @@ select{height:30px;border:1px solid var(--border);border-radius:8px;background:v
     </section>
 
     <aside class="right">
+      <div>
+        <div class="panel-head"><span>REAPER 连接</span><button class="mini-btn" id="reaper-refresh" title="刷新">↻</button></div>
+        <div class="row"><span class="dot" id="reaper-dot"></span><span id="reaper-text" style="font-size:12px">检测中…</span></div>
+        <button class="btn-primary" id="reaper-install" style="display:none;margin-top:4px">一键安装桥</button>
+      </div>
       <div>
         <div class="panel-head"><span>MCP 能力</span><button class="mini-btn" id="add-mcp">+ 添加</button></div>
         <div id="mcp-list"></div>

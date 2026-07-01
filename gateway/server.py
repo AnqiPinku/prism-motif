@@ -41,6 +41,24 @@ def load_json(p, d):
         return d
 
 
+_BRIDGE_INSTALLER = None
+
+
+def bridge_installer():
+    """懒加载 reaper-mcp 的 install_bridge.py（兄弟仓，经 ${PRISM_HOME} 定位）。"""
+    global _BRIDGE_INSTALLER
+    if _BRIDGE_INSTALLER is None:
+        import importlib.util
+        p = os.path.join(str(paths.PRISM_HOME), "reaper-mcp", "installer", "install_bridge.py")
+        if not os.path.isfile(p):
+            return None
+        spec = importlib.util.spec_from_file_location("reaper_bridge_installer", p)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        _BRIDGE_INSTALLER = mod
+    return _BRIDGE_INSTALLER
+
+
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, *a):
         pass
@@ -60,6 +78,8 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/mcp/tools":
             q = parse_qs(urlparse(self.path).query)
             return self._json(self._mcp_tools((q.get("name") or [""])[0]))
+        if path == "/api/reaper/status":
+            return self._json(self._reaper_status())
         if path.startswith("/api/threads/"):
             tid = path[len("/api/threads/"):]
             try:
@@ -95,6 +115,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(self._mcp_delete(body.get("name")))
         if path == "/api/settings":
             return self._json(self._settings_save(body))
+        if path == "/api/reaper/install-bridge":
+            return self._json(self._reaper_install(body.get("resource_path")))
         if path == "/api/threads/delete":
             threads_mod.delete_thread(str(DATA / "threads"), body.get("id", ""))
             return self._json({"ok": True})
@@ -292,6 +314,24 @@ class Handler(BaseHTTPRequestHandler):
         except Exception as e:  # noqa: BLE001 钥匙链后端不可用/写失败 → 明确报错，不 500
             return {"ok": False, "error": "密钥保存失败：%s" % e}
         return {"ok": True}
+
+    def _reaper_status(self):
+        ib = bridge_installer()
+        if not ib:
+            return {"error": "找不到 reaper-mcp 安装器（检查安装完整性）"}
+        try:
+            return ib.status()
+        except Exception as e:  # noqa: BLE001
+            return {"error": str(e)}
+
+    def _reaper_install(self, resource_path):
+        ib = bridge_installer()
+        if not ib:
+            return {"ok": False, "error": "找不到 reaper-mcp 安装器（检查安装完整性）"}
+        try:
+            return ib.install(resource_path or None)
+        except Exception as e:  # noqa: BLE001
+            return {"ok": False, "error": str(e)}
 
     def _ws_set(self, name):
         try:
