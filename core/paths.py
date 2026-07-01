@@ -76,11 +76,8 @@ def expand(value):
 
 
 def numba_cache_dir():
-    """感知 sidecar 的 numba JIT 磁盘缓存目录。钉在版本无关的 per-user 位置，
-    这样那次一次性 ~16s 编译只发生一次、且能跨 app 更新保留（不随安装目录被清）。"""
-    if os.name == "nt":
-        base = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
-    else:
-        base = os.environ.get("XDG_CACHE_HOME") or os.path.join(
-            os.path.expanduser("~"), ".cache")
-    return os.path.join(base, "PrismCore", "numba-cache")
+    """感知 sidecar 的 numba JIT 磁盘缓存目录，钉在 DATA_ROOT 下（版本无关、跨更新保留）。
+    不用 %LOCALAPPDATA%：实测本机 C: AppData 有过滤驱动干扰，numba 同目录原子改名
+    (.nbi.tmp → .nbi) 报 WinError 17"无法跨盘移动"，缓存写入必失败 → 分析工具全挂。
+    放数据根同盘（开发=A:\\Prismcode\\prism-motif）绕开；打包(P5b)时随 DATA_ROOT 落位再验。"""
+    return str(DATA_ROOT / "numba-cache")
