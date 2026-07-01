@@ -512,10 +512,22 @@ $("reaper-install").onclick = async () => {
   const btn = $("reaper-install");
   btn.disabled = true; btn.textContent = "安装中…";
   try {
-    const r = await postJSON("/api/reaper/install-bridge", {}).then((x) => x.json());
-    if (r.ok === false) { alert(r.error || "安装失败"); return; }
+    let r = await postJSON("/api/reaper/install-bridge", {}).then((x) => x.json());
+    // 便携版 REAPER + 桥未加载时可能定位不到真实资源路径 → 让用户粘贴
+    // （真实路径可向已加载的桥查到；否则回退推测值）。REAPER 菜单 Options > Show REAPER resource path。
+    if (r.ok === false || r.resource_detected === false) {
+      const guess = r.resource_path || "";
+      const msg = (r.ok === false ? (r.error || "安装失败") + "\n\n" :
+        "已装到推测路径：\n" + guess +
+        "\n\n若 REAPER 是便携版且这不对，请粘贴真实资源路径\n（REAPER 菜单 Options > Show REAPER resource path），留空则用上面这个：");
+      const manual = prompt(msg, guess);
+      if (manual && manual.trim() && manual.trim() !== guess) {
+        r = await postJSON("/api/reaper/install-bridge", { resource_path: manual.trim() }).then((x) => x.json());
+        if (r.ok === false) { alert(r.error || "安装失败"); return; }
+      } else if (r.ok === false) { return; }
+    }
     alert("已安装：\n- " + (r.actions || []).join("\n- ") +
-      "\n\n请重启 REAPER 让自动加载生效（或在 REAPER 里 Actions > Load ReaScript 手动加载一次）。");
+      "\n\n请重启 REAPER 让自动加载生效。");
   } finally {
     btn.disabled = false;
     loadReaperStatus();
