@@ -54,10 +54,26 @@ pub fn run() {
             let child = spawn_gateway(port);
             *app.state::<Gateway>().0.lock().unwrap() = child;
             wait_port(port, Duration::from_secs(45));
-            let url = format!("http://127.0.0.1:{port}");
-            WebviewWindowBuilder::new(app, "main", WebviewUrl::External(url.parse().unwrap()))
+            // Size to ~82% of the primary monitor so it opens as a real workspace,
+            // not a small floating window — adapts to whatever screen the user has.
+            let (win_w, win_h) = app
+                .handle()
+                .primary_monitor()
+                .ok()
+                .flatten()
+                .map(|m| {
+                    let sf = m.scale_factor();
+                    let lw = m.size().width as f64 / sf;
+                    let lh = m.size().height as f64 / sf;
+                    ((lw * 0.82).max(1120.0), (lh * 0.86).max(720.0))
+                })
+                .unwrap_or((1360.0, 880.0));
+            // Load the BUNDLED frontend (tauri:// origin) so window/drag APIs work;
+            // the React app talks to the gateway (127.0.0.1:port) over CORS.
+            WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))
                 .title("Prism Motif")
-                .inner_size(1280.0, 832.0)
+                .decorations(false)
+                .inner_size(win_w, win_h)
                 .min_inner_size(960.0, 640.0)
                 .center()
                 .build()?;

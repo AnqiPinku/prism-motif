@@ -1,10 +1,17 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react'
+import { getCurrentWindow } from '@tauri-apps/api/window'
 import {
-  getJSON, streamChat, respondPermission,
+  getJSON, streamChat, respondPermission, inTauri,
   type State, type ReaperStatus, type ChatEvent,
 } from './api'
 import Settings, { type SettingsData } from './Settings'
 import Onboarding from './Onboarding'
+
+// data-tauri-drag-region marks the title-bar area draggable (only in the Tauri shell).
+const drag = inTauri ? { 'data-tauri-drag-region': '' } : {}
+
+// Resizable sidebar bounds (px); width persists in localStorage.
+const NAV_KEY = 'prism.navWidth', NAV_DEFAULT = 300, NAV_MIN = 240, NAV_MAX = 440
 
 const I = ({ n, s }: { n: string; s?: number }) => (
   <span className="material-symbols-outlined" style={s ? { fontSize: s } : undefined} aria-hidden>{n}</span>
@@ -33,6 +40,33 @@ export default function App() {
   const [onboarding, setOnboarding] = useState(false)
   const abort = useRef<AbortController | null>(null)
   const msgsRef = useRef<HTMLDivElement>(null)
+
+  // Resizable sidebar — width persisted; delta-based pointer drag (handle sits outside the drag region).
+  const [navW, setNavW] = useState<number>(() => {
+    const v = parseInt(localStorage.getItem(NAV_KEY) || '', 10)
+    return Number.isFinite(v) ? Math.min(NAV_MAX, Math.max(NAV_MIN, v)) : NAV_DEFAULT
+  })
+  useEffect(() => { localStorage.setItem(NAV_KEY, String(navW)) }, [navW])
+  const dragRef = useRef<{ startX: number; startW: number } | null>(null)
+  const onNavDrag = useCallback((e: PointerEvent) => {
+    const d = dragRef.current; if (!d) return
+    setNavW(Math.min(NAV_MAX, Math.max(NAV_MIN, d.startW + (e.clientX - d.startX))))
+  }, [])
+  const endNavDrag = useCallback(() => {
+    dragRef.current = null
+    document.body.classList.remove('nav-resizing')
+    document.querySelector('.nav-handle')?.classList.remove('dragging')
+    window.removeEventListener('pointermove', onNavDrag)
+  }, [onNavDrag])
+  const startNavDrag = (e: ReactPointerEvent) => {
+    e.preventDefault()
+    dragRef.current = { startX: e.clientX, startW: navW }
+    document.body.classList.add('nav-resizing')
+    ;(e.currentTarget as HTMLElement).classList.add('dragging')
+    window.addEventListener('pointermove', onNavDrag)
+    window.addEventListener('pointerup', endNavDrag, { once: true })
+  }
+  useEffect(() => () => window.removeEventListener('pointermove', onNavDrag), [onNavDrag])
 
   const loadState = useCallback(async () => {
     const s = await getJSON<State>('/api/state')
@@ -142,9 +176,9 @@ export default function App() {
     <div className="cbox">
       <button className="iconbtn" aria-label="添加"><I n="add" /></button>
       <textarea
-        rows={1} value={input} placeholder="想写点什么？让 Prism 帮你作曲、编曲、混音…"
+        rows={1} value={input} placeholder="描述你的音乐想法，交给 Prism…"
         onChange={(e) => setInput(e.target.value)}
-        onInput={(e) => { const t = e.currentTarget; t.style.height = 'auto'; t.style.height = Math.min(t.scrollHeight, 140) + 'px' }}
+        onInput={(e) => { const t = e.currentTarget; t.style.height = 'auto'; t.style.height = Math.min(t.scrollHeight, 140) + 'px'; t.style.overflowY = t.scrollHeight > 140 ? 'auto' : 'hidden' }}
         onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() } }}
       />
       <span className="modelchip">
@@ -162,11 +196,11 @@ export default function App() {
 
   return (
     <div className="app">
-      <header className="bar">
+      <header className="bar" {...drag}>
         <button className="iconbtn" aria-label="菜单"><I n="menu" /></button>
-        <span className="logo"><I n="graphic_eq" /></span>
-        <span className="brand">Prism Motif</span>
-        <span className="spacer" />
+        <span className="logo" {...drag}><I n="graphic_eq" /></span>
+        <span className="brand" {...drag}>Prism Motif</span>
+        <span className="spacer" {...drag} />
         <div className="statuswrap">
           <button className="statuschip" onClick={() => setStatusOpen((v) => !v)}>
             <span className="dot" style={{ background: ready(allReady) }} />
@@ -184,11 +218,11 @@ export default function App() {
           )}
         </div>
         <button className="iconbtn" aria-label="设置" onClick={() => setSettingsOpen(true)}><I n="settings" /></button>
-        <span className="avatar">科</span>
+        {inTauri && <WinControls />}
       </header>
 
       <div className="body">
-        <aside className="nav">
+        <aside className="nav" style={{ '--nav-w': `${navW}px` } as CSSProperties}>
           <button className="ws"><I n="folder_open" s={20} />{state?.workspace.current || 'default'}<span className="spacer" /><I n="expand_more" s={20} /></button>
           <button className="newchat" onClick={newChat}><I n="add" />新对话</button>
           <div className="navlabel">最近</div>
@@ -198,6 +232,9 @@ export default function App() {
             </button>
           ))}
         </aside>
+
+        <div className="nav-handle" style={{ left: navW - 4 }} onPointerDown={startNavDrag}
+          role="separator" aria-orientation="vertical" aria-label="调整侧边栏宽度" />
 
         <main className="chat">
           {msgs.length === 0 ? (
@@ -243,17 +280,33 @@ export default function App() {
   )
 }
 
+// Custom window buttons (frameless Tauri window). Only rendered inside the shell.
+function WinControls() {
+  const w = getCurrentWindow()
+  return (
+    <div className="wctl">
+      <button aria-label="最小化" onClick={() => w.minimize()}><I n="remove" s={18} /></button>
+      <button aria-label="最大化" onClick={() => w.toggleMaximize()}><I n="crop_square" s={15} /></button>
+      <button className="close" aria-label="关闭" onClick={() => w.close()}><I n="close" s={18} /></button>
+    </div>
+  )
+}
+
 // Collapsed-by-default bar of tool calls; expand to see each tool's result/error.
 function ToolBar({ chips }: { chips: Chip[] }) {
   if (chips.length === 0) return null
   const fails = chips.filter((c) => c.tone === 'err').length
-  const running = chips.some((c) => c.tone === 'run')
+  const active = chips.filter((c) => c.tone === 'run')
+  const running = active.length > 0
+  // show the current tool (running one, else the most recent) instead of a bare count
+  const cur = running ? active[active.length - 1] : chips[chips.length - 1]
   const icon = (t: Chip['tone']) => (t === 'ok' ? 'check_circle' : t === 'err' ? 'cancel' : 'progress_activity')
   return (
     <details className="toolbar">
       <summary>
         <I n="build" s={16} />
-        <span>工具 · {chips.length}</span>
+        <span className="tname">{cur.label}</span>
+        {chips.length > 1 && <span className="tcount">{chips.length}</span>}
         {fails > 0 && <span className="tf">{fails} 失败</span>}
         {running && <span className="tr">运行中…</span>}
         <I n="expand_more" s={18} />
