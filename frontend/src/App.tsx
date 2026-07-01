@@ -29,18 +29,28 @@ type Item =
 
 // 音频分析类工具的 JSON 结果 → 指标磁贴（设计稿的"工程分析"卡）；解析不了就返回 null 走普通 chip。
 function buildMetrics(name?: string, content?: string): { title: string; tiles: Tile[] } | null {
-  if (!name || !content || !/analyze_audio|measure_loudness/.test(name)) return null
+  if (!name || !content) return null
   let d: Record<string, any>
   try { d = JSON.parse(content) } catch { return null }
   if (typeof d !== 'object' || d === null) return null
   const tiles: Tile[] = []
-  if (typeof d.key?.key === 'string') tiles.push({ label: '调性', value: `${d.key.key} ${d.key.mode || ''}`.trim() })
-  if (typeof d.tempo?.bpm === 'number') tiles.push({ label: '速度', value: String(d.tempo.bpm), unit: 'BPM' })
-  if (typeof d.loudness?.integrated_lufs === 'number') tiles.push({ label: '响度', value: String(d.loudness.integrated_lufs), unit: 'LUFS' })
-  if (typeof d.loudness?.loudness_range_lu === 'number') tiles.push({ label: '动态范围', value: String(d.loudness.loudness_range_lu), unit: 'LU' })
-  if (typeof d.loudness?.true_peak_dbtp === 'number') tiles.push({ label: '真峰值', value: String(d.loudness.true_peak_dbtp), unit: 'dBTP' })
-  if (typeof d.duration_seconds === 'number') tiles.push({ label: '长度', value: String(d.duration_seconds), unit: '秒' })
-  return tiles.length >= 2 ? { title: '音频分析', tiles: tiles.slice(0, 6) } : null
+  if (/analyze_audio|measure_loudness/.test(name)) {
+    if (typeof d.key?.key === 'string') tiles.push({ label: '调性', value: `${d.key.key} ${d.key.mode || ''}`.trim() })
+    if (typeof d.tempo?.bpm === 'number') tiles.push({ label: '速度', value: String(d.tempo.bpm), unit: 'BPM' })
+    if (typeof d.loudness?.integrated_lufs === 'number') tiles.push({ label: '响度', value: String(d.loudness.integrated_lufs), unit: 'LUFS' })
+    if (typeof d.loudness?.loudness_range_lu === 'number') tiles.push({ label: '动态范围', value: String(d.loudness.loudness_range_lu), unit: 'LU' })
+    if (typeof d.loudness?.true_peak_dbtp === 'number') tiles.push({ label: '真峰值', value: String(d.loudness.true_peak_dbtp), unit: 'dBTP' })
+    if (typeof d.duration_seconds === 'number') tiles.push({ label: '长度', value: String(d.duration_seconds), unit: '秒' })
+    return tiles.length >= 2 ? { title: '音频分析', tiles: tiles.slice(0, 6) } : null
+  }
+  if (/listen_subjective/.test(name)) {
+    // Gemini 听感：0-100 越低越好的四项 + 情绪
+    if (typeof d.mood === 'string') tiles.push({ label: '情绪', value: d.mood })
+    for (const [k, label] of [['muddy', '浑浊'], ['harsh', '刺耳'], ['sibilant', '齿音'], ['bright', '明亮']] as const)
+      if (typeof d[k] === 'number') tiles.push({ label, value: String(d[k]), unit: '/100' })
+    return tiles.length >= 2 ? { title: 'Gemini 听感', tiles: tiles.slice(0, 6) } : null
+  }
+  return null
 }
 type Msg = { role: 'user' | 'assistant'; text: string; items: Item[] }
 
