@@ -1,20 +1,41 @@
 use std::net::TcpStream;
-use std::process::{Child, Command};
+use std::os::windows::process::CommandExt;
+use std::process::{Child, Command, Stdio};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
 
+// Windowless shell (release) has no console: console children would each pop a
+// black window unless spawned with CREATE_NO_WINDOW.
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
 // The gateway child process, so we can kill it (and its MCP subprocess tree) on exit.
 struct Gateway(Mutex<Option<Child>>);
+
+// With no console the gateway's prints would vanish — keep them in a per-user log file.
+fn gateway_log() -> Option<std::fs::File> {
+    let dir = std::path::Path::new(&std::env::var("LOCALAPPDATA").ok()?)
+        .join("PrismMotif")
+        .join("logs");
+    std::fs::create_dir_all(&dir).ok()?;
+    std::fs::File::create(dir.join("gateway.log")).ok()
+}
 
 fn spawn_gateway(port: u16) -> Option<Child> {
     // DEV: system Python + the repo gateway. Packaging (P5b) will resolve a bundled
     // interpreter and the app-relative gateway path instead of these dev absolutes.
-    Command::new("A:/Python310/python.exe")
-        .arg("A:/Prismcode/prism-motif/gateway/server.py")
+    let mut cmd = Command::new("A:/Python310/python.exe");
+    cmd.arg("A:/Prismcode/prism-motif/gateway/server.py")
         .env("PRISM_PORT", port.to_string())
-        .spawn()
-        .ok()
+        .env("PYTHONIOENCODING", "utf-8") // 日志重定向到文件后防中文 GBK 编码崩溃
+        .env("PYTHONUNBUFFERED", "1") // 重定向到文件时不缓冲，日志实时可读
+        .creation_flags(CREATE_NO_WINDOW);
+    if let Some(log) = gateway_log() {
+        if let Ok(log_err) = log.try_clone() {
+            cmd.stdout(Stdio::from(log)).stderr(Stdio::from(log_err));
+        }
+    }
+    cmd.spawn().ok()
 }
 
 fn wait_port(port: u16, timeout: Duration) -> bool {
@@ -34,6 +55,7 @@ fn kill_tree(child: &mut Child) {
     // the gateway spawns MCP subprocesses (perception / reaper) — kill the whole tree
     let _ = Command::new("taskkill")
         .args(["/PID", &pid.to_string(), "/T", "/F"])
+        .creation_flags(CREATE_NO_WINDOW)
         .spawn();
 }
 
