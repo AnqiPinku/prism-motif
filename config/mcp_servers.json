@@ -14,7 +14,12 @@
       "command": "python",
       "args": [
         "A:/Prismcode/music-perception-mcp/server/music_perception_server.py"
-      ]
+      ],
+      "comment": "listen_subjective needs GEMINI_API_KEY set in the OS env (NOT here — it would be committed). Relay base_url/model below are non-secret. Set: setx GEMINI_API_KEY sk-...",
+      "env": {
+        "GEMINI_BASE_URL": "https://www.packyapi.com/v1",
+        "GEMINI_MODEL": "gemini-2.5-flash"
+      }
     },
     {
       "name": "system",
