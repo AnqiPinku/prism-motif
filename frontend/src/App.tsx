@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import {
   getJSON, streamChat, respondPermission, inTauri,
@@ -18,10 +20,28 @@ const I = ({ n, s }: { n: string; s?: number }) => (
 )
 
 type Chip = { kind: 'chip'; tone: 'ok' | 'err' | 'run'; label: string; detail?: string }
+type Tile = { label: string; value: string; unit?: string }
 type Item =
   | Chip
   | { kind: 'trace'; text: string }
   | { kind: 'perm'; id: string; label: string; decided?: string }
+  | { kind: 'metrics'; title: string; tiles: Tile[] }
+
+// 音频分析类工具的 JSON 结果 → 指标磁贴（设计稿的"工程分析"卡）；解析不了就返回 null 走普通 chip。
+function buildMetrics(name?: string, content?: string): { title: string; tiles: Tile[] } | null {
+  if (!name || !content || !/analyze_audio|measure_loudness/.test(name)) return null
+  let d: Record<string, any>
+  try { d = JSON.parse(content) } catch { return null }
+  if (typeof d !== 'object' || d === null) return null
+  const tiles: Tile[] = []
+  if (typeof d.key?.key === 'string') tiles.push({ label: '调性', value: `${d.key.key} ${d.key.mode || ''}`.trim() })
+  if (typeof d.tempo?.bpm === 'number') tiles.push({ label: '速度', value: String(d.tempo.bpm), unit: 'BPM' })
+  if (typeof d.loudness?.integrated_lufs === 'number') tiles.push({ label: '响度', value: String(d.loudness.integrated_lufs), unit: 'LUFS' })
+  if (typeof d.loudness?.loudness_range_lu === 'number') tiles.push({ label: '动态范围', value: String(d.loudness.loudness_range_lu), unit: 'LU' })
+  if (typeof d.loudness?.true_peak_dbtp === 'number') tiles.push({ label: '真峰值', value: String(d.loudness.true_peak_dbtp), unit: 'dBTP' })
+  if (typeof d.duration_seconds === 'number') tiles.push({ label: '长度', value: String(d.duration_seconds), unit: '秒' })
+  return tiles.length >= 2 ? { title: '音频分析', tiles: tiles.slice(0, 6) } : null
+}
 type Msg = { role: 'user' | 'assistant'; text: string; items: Item[] }
 
 export default function App() {
@@ -116,6 +136,9 @@ export default function App() {
             break
           }
         }
+        // 结构化的音频分析结果额外升级成指标卡（原始 JSON 仍收在工具栏里）
+        const metrics = e.is_error ? null : buildMetrics(e.name, e.content)
+        if (metrics) items.push({ kind: 'metrics', ...metrics })
         return { ...m, items }
       })
     else if (e.type === 'permission_request')
@@ -253,7 +276,11 @@ export default function App() {
                     <div key={i} className="a">
                       <div className="ava"><I n="graphic_eq" s={18} /></div>
                       <div className="abody">
-                        {m.text && <div className="atext">{m.text}</div>}
+                        {m.text && (
+                          <div className="atext md">
+                            <ReactMarkdown remarkPlugins={[remarkGfm]}>{m.text}</ReactMarkdown>
+                          </div>
+                        )}
                         <ToolBar chips={m.items.filter((it): it is Chip => it.kind === 'chip')} />
                         {m.items.filter((it) => it.kind !== 'chip').map((it, j) => <Rendered key={j} it={it} onDecide={decide} />)}
                       </div>
@@ -325,6 +352,20 @@ function ToolBar({ chips }: { chips: Chip[] }) {
 
 function Rendered({ it, onDecide }: { it: Item; onDecide: (id: string, allow: boolean) => void }) {
   if (it.kind === 'trace') return <div className="trace">{it.text}</div>
+  if (it.kind === 'metrics')
+    return (
+      <div className="mcard">
+        <div className="mtitle">{it.title}</div>
+        <div className="mtiles">
+          {it.tiles.map((t, i) => (
+            <div className="mtile" key={i}>
+              <div className="ml">{t.label}</div>
+              <div className="mv">{t.value}{t.unit && <span className="mu">{t.unit}</span>}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    )
   if (it.kind === 'chip')
     return (
       <div className="chips"><span className={'chip ' + it.tone}>

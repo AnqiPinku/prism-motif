@@ -21,7 +21,7 @@ export type ChatEvent =
   | { type: 'thread'; id: string }
   | { type: 'delta'; text: string }
   | { type: 'tool_call'; name: string; arguments: unknown }
-  | { type: 'tool_result'; is_error?: boolean; content?: string }
+  | { type: 'tool_result'; name?: string; is_error?: boolean; content?: string }
   | { type: 'permission_request'; id: string; name: string; arguments: unknown }
   | { type: 'context'; prompt_tokens: number; window: number; pct: number }
   | { type: 'compaction'; content: string }

@@ -77,6 +77,35 @@ body.nav-resizing{cursor:col-resize;user-select:none}
 .a .ava .material-symbols-outlined{font-size:18px}
 .abody{min-width:0}
 .atext{line-height:1.7;font-size:14.5px;color:var(--on-surface);white-space:pre-wrap}
+/* markdown 渲染态（不再保留源码换行，由块级元素排版） */
+.atext.md{white-space:normal}
+.md>:first-child{margin-top:0}
+.md>:last-child{margin-bottom:0}
+.md p{margin:8px 0}
+.md h1,.md h2,.md h3,.md h4{font-weight:500;line-height:1.4;margin:16px 0 8px;color:var(--on-surface)}
+.md h1{font-size:19px}.md h2{font-size:17px}.md h3{font-size:15.5px}.md h4{font-size:14.5px}
+.md ul,.md ol{margin:8px 0;padding-left:22px}
+.md li{margin:3px 0}
+.md li>p{margin:0}
+.md strong{font-weight:600}
+.md hr{border:none;height:1px;background:var(--outline-var);margin:14px 0}
+.md blockquote{margin:8px 0;padding:2px 14px;border-left:3px solid var(--primary-container);color:var(--muted)}
+.md code{font-family:'Roboto Mono',Consolas,monospace;font-size:12.5px;background:var(--surface-1);border-radius:6px;padding:1.5px 6px}
+.md pre{background:var(--surface-1);border-radius:12px;padding:12px 14px;overflow:auto;margin:10px 0}
+.md pre code{background:none;padding:0;font-size:12.5px;line-height:1.6}
+.md table{border-collapse:separate;border-spacing:0;margin:10px 0;font-size:13.5px;border:1px solid var(--outline-var);border-radius:12px;overflow:hidden}
+.md th,.md td{padding:8px 14px;text-align:left}
+.md th{background:var(--surface-1);font-weight:500;color:var(--on-surface-var)}
+.md tr+tr td{border-top:1px solid var(--outline-var)}
+.md a{color:var(--primary)}
+/* 指标卡（设计稿"工程分析"）：淡紫卡底 + 白色磁贴 */
+.mcard{margin-top:12px;background:var(--surface-1);border-radius:16px;padding:14px 16px}
+.mtitle{font-size:13px;color:var(--on-surface-var);margin-bottom:10px;font-weight:500}
+.mtiles{display:flex;flex-wrap:wrap;gap:10px}
+.mtile{background:var(--surface);border-radius:12px;padding:10px 16px;min-width:104px;box-shadow:0 1px 2px rgba(28,20,60,.05)}
+.mtile .ml{font-size:11.5px;color:var(--muted);margin-bottom:3px}
+.mtile .mv{font-size:19px;font-weight:500;color:var(--on-surface)}
+.mtile .mu{font-size:11.5px;color:var(--muted);margin-left:4px;font-weight:400}
 .chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
 .chip{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 12px;border-radius:16px;background:var(--surface-2);color:var(--on-surface-var);font-size:12.5px}
 .chip .material-symbols-outlined{font-size:16px}
