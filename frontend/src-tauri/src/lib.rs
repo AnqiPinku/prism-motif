@@ -57,8 +57,9 @@ pub fn run() {
             let url = format!("http://127.0.0.1:{port}");
             WebviewWindowBuilder::new(app, "main", WebviewUrl::External(url.parse().unwrap()))
                 .title("Prism Motif")
-                .inner_size(1180.0, 780.0)
-                .min_inner_size(900.0, 600.0)
+                .inner_size(1280.0, 832.0)
+                .min_inner_size(960.0, 640.0)
+                .center()
                 .build()?;
             Ok(())
         })
