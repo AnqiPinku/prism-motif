@@ -180,11 +180,37 @@ export default function App() {
   }
 
   const openThread = async (id: string) => {
-    const data = await getJSON<{ messages: { role: string; content: string }[] }>('/api/threads/' + encodeURIComponent(id))
+    type Raw = { role: string; content?: string | null; tool_call_id?: string; tool_calls?: { id?: string; name: string }[] }
+    const data = await getJSON<{ messages: Raw[] }>('/api/threads/' + encodeURIComponent(id))
     setThreadId(id)
-    setMsgs((data.messages || [])
-      .filter((m) => m.role === 'user' || (m.role === 'assistant' && m.content))
-      .map((m) => ({ role: m.role as 'user' | 'assistant', text: m.content, items: [] })))
+    // 从存档重建：同一回合的 assistant/tool 消息合并成一个气泡，工具链恢复成 chips + 指标卡
+    const out: Msg[] = []
+    const byCallId = new Map<string, Chip>()
+    let cur: Msg | null = null
+    for (const m of data.messages || []) {
+      if (m.role === 'user') {
+        out.push({ role: 'user', text: m.content || '', items: [] })
+        cur = null
+      } else if (m.role === 'assistant' && (m.content || m.tool_calls?.length)) {
+        if (!cur) { cur = { role: 'assistant', text: '', items: [] }; out.push(cur) }
+        for (const tc of m.tool_calls || []) {
+          const chip: Chip = { kind: 'chip', tone: 'ok', label: tc.name }
+          if (tc.id) byCallId.set(tc.id, chip)
+          cur.items.push(chip)
+        }
+        if (m.content) cur.text = m.content            // 回合内最后一条带文本的 = 最终回复
+      } else if (m.role === 'tool' && cur) {
+        const chip = m.tool_call_id ? byCallId.get(m.tool_call_id) : undefined
+        if (!chip) continue
+        const content = (m.content || '').trim()
+        chip.detail = content
+        // 存档没记 is_error，按常见错误开头近似判断
+        if (/^(analysis error|error|traceback|用户拒绝)/i.test(content)) chip.tone = 'err'
+        const metrics = chip.tone === 'ok' ? buildMetrics(chip.label, content) : null
+        if (metrics) cur.items.push({ kind: 'metrics', ...metrics })
+      }
+    }
+    setMsgs(out)
   }
 
   const newChat = () => { setThreadId(null); setMsgs([]) }
@@ -339,12 +365,23 @@ function ToolBar({ chips }: { chips: Chip[] }) {
         <I n="expand_more" s={18} />
       </summary>
       <div className="toollist">
-        {chips.map((c, i) => (
-          <div className="toolrow" key={i}>
-            <span className={'chip ' + c.tone}><I n={icon(c.tone)} s={16} />{c.label}</span>
-            {c.detail && <pre className="tooldetail">{c.detail.length > 700 ? c.detail.slice(0, 700) + ' …' : c.detail}</pre>}
-          </div>
-        ))}
+        {chips.map((c, i) =>
+          c.detail ? (
+            // 有输出的工具：默认收起，点 chip 再展开详情
+            <details className="toolrow" key={i}>
+              <summary>
+                <span className={'chip ' + c.tone}>
+                  <I n={icon(c.tone)} s={16} />{c.label}<I n="expand_more" s={14} />
+                </span>
+              </summary>
+              <pre className="tooldetail">{c.detail.length > 700 ? c.detail.slice(0, 700) + ' …' : c.detail}</pre>
+            </details>
+          ) : (
+            <div className="toolrow" key={i}>
+              <span className={'chip ' + c.tone}><I n={icon(c.tone)} s={16} />{c.label}</span>
+            </div>
+          ),
+        )}
       </div>
     </details>
   )

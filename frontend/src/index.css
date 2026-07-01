@@ -122,9 +122,16 @@ body.nav-resizing{cursor:col-resize;user-select:none}
 .toolbar .tcount{font-size:11px;color:var(--muted);background:var(--surface-2);border-radius:9px;padding:1px 7px;flex-shrink:0}
 .toolbar .tf{color:var(--red);font-size:12px;flex-shrink:0}
 .toolbar .tr{color:var(--primary);font-size:12px;flex-shrink:0}
-.toollist{padding:8px 14px 12px;display:flex;flex-direction:column;gap:10px;border-top:1px solid var(--outline-var)}
+/* 列表内部滚动：再长也不吃聊天区，顶部的收起箭头始终可见 */
+.toollist{padding:8px 14px 12px;display:flex;flex-direction:column;gap:8px;border-top:1px solid var(--outline-var);max-height:min(420px,48vh);overflow:auto}
 .toolrow{display:flex;flex-direction:column;gap:4px}
 .toolrow .chip{align-self:flex-start}
+/* 有详情的行：chip 即开关，默认收起 */
+details.toolrow>summary{list-style:none;display:flex;cursor:pointer}
+details.toolrow>summary::-webkit-details-marker{display:none}
+details.toolrow .chip>.material-symbols-outlined:last-child{color:var(--muted);transition:transform .15s}
+details.toolrow[open] .chip>.material-symbols-outlined:last-child{transform:rotate(180deg)}
+details.toolrow:hover .chip{background:var(--surface-2)}
 .tooldetail{margin:0;font-family:'Roboto Mono',monospace;font-size:11.5px;line-height:1.5;color:var(--muted);background:var(--surface-2);border-radius:8px;padding:8px 10px;white-space:pre-wrap;word-break:break-word;max-height:180px;overflow:auto}
 .trace{font-size:12.5px;color:var(--muted);margin-top:8px;line-height:1.5}
 .perm{border:1px solid var(--amber);background:#fff8ee;border-radius:14px;padding:10px 14px;margin-top:10px;font-size:13.5px}
