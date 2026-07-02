@@ -132,18 +132,46 @@ def set_workspace(name):
     return name
 
 
+def archived_workspaces():
+    """已归档的工作区名列表（settings.archived_workspaces）。"""
+    return sorted(set(_settings().get("archived_workspaces") or []))
+
+
+def set_workspace_archived(name, archived):
+    """归档/取消归档一个工作区（只影响侧栏展示，不动数据）。"""
+    name = _safe_ws(name)
+    if name == "default":
+        raise ValueError("不能归档 default 工作区")
+    s = _settings()
+    cur = set(s.get("archived_workspaces") or [])
+    if archived:
+        cur.add(name)
+    else:
+        cur.discard(name)
+    s["archived_workspaces"] = sorted(cur)
+    _save_settings(s)
+    return True
+
+
 def rename_workspace(old, new):
     """重命名工作区（移动其记忆目录）；目标名已存在则拒绝（不覆盖、不切换、不产生孤儿）。
     仅在移动成功后，若改的是当前工作区才同步切换——避免静默把 current 指到异域数据集。"""
     old, new = _safe_ws(old), _safe_ws(new)
     if old == new:
         return new
+    s = _settings()
+    archived = set(s.get("archived_workspaces") or [])
     base = _memory_base_dir()
     src, dst = os.path.join(base, old), os.path.join(base, new)
     if os.path.exists(dst):
         raise ValueError("目标工作区已存在：%s" % new)
     if os.path.isdir(src):
         os.rename(src, dst)
+    if old in archived:
+        archived.discard(old)
+        archived.add(new)
+        s["archived_workspaces"] = sorted(archived)
+        _save_settings(s)
     if current_workspace() == old:
         set_workspace(new)
     return new
@@ -159,6 +187,12 @@ def delete_workspace(name):
     p = os.path.join(_memory_base_dir(), name)
     if os.path.isdir(p):
         shutil.rmtree(p)
+    s = _settings()
+    archived = set(s.get("archived_workspaces") or [])
+    if name in archived:
+        archived.discard(name)
+        s["archived_workspaces"] = sorted(archived)
+        _save_settings(s)
     return True
 
 
@@ -166,20 +200,27 @@ def run_turn(goal, provider=None, on_event=None, thread_id=None, permission=None
     """在一个会话线程内跑一轮：载入该线程的历史 → 追加本轮 → 跑循环 → 存回同一线程。
     返回 (thread_id, final)。同一对话多轮共用一个 thread_id，能记住上下文。"""
     reasoner, provider_name = build_reasoner(provider)
+    settings = _settings()
+    _notify = on_event or (lambda _e: None)
+    provider_cfg = (settings.get("providers") or {}).get(provider_name) or {}
+    workspace = settings.get("workspace", "default")
+    _notify({"type": "turn_start", "provider": provider_name,
+             "model": provider_cfg.get("model") or "", "workspace": workspace,
+             "phase": "initializing", "content": "正在初始化会话"})
 
     mcp_cfg = _load_json(CONFIG / "mcp_servers.json", {"servers": []})
     enabled = [s for s in mcp_cfg.get("servers", []) if s.get("enabled", True)]
     toolhub = ToolHub(enabled, tool_timeout=_settings().get("tool_timeout_s", 60))
+    _notify({"type": "mcp_start", "server_count": len(enabled),
+             "content": "正在连接 MCP 服务"})
     toolhub.start()
+    _notify({"type": "mcp_ready", "server_count": len(enabled),
+             "tool_count": len(toolhub.specs()), "content": "MCP 工具已就绪"})
 
     try:
-        settings = _settings()
-        workspace = settings.get("workspace", "default")
-
         # 上下文压缩"透镜"：发给模型的消息做工具结果消隐 + 上报占用，磁盘仍存全本（领域无关）。
         ctx = settings.get("context") or {}
         raw_reasoner = reasoner            # 摘要压实用原始模型（不经透镜，避免递归/重复上报）
-        _notify = on_event or (lambda _e: None)
         try:                               # 模型瞬时错误重试时流式上报，让前端可见
             raw_reasoner.on_retry = lambda a, m, why: _notify(
                 {"type": "retry", "attempt": a, "max": m,
@@ -202,12 +243,13 @@ def run_turn(goal, provider=None, on_event=None, thread_id=None, permission=None
         base = settings.get("base_prompt", DEFAULT_BASE_PROMPT)
         system_prompt = build_system_prompt(skills, memories, base=base)
 
-        prior, prev_summary = [], None
+        prior, prev_summary, thread_ws = [], None, None
         if thread_id:
             try:
                 data = threads_mod.load_thread(str(DATA / "threads"), thread_id)
                 prior = threads_mod.deserialize(data.get("messages", []))
                 prev_summary = (data.get("config") or {}).get("summary")
+                thread_ws = (data.get("config") or {}).get("workspace")  # 线程归属不随当前工作区漂移
             except (OSError, ValueError):
                 prior = []
         else:
@@ -239,6 +281,9 @@ def run_turn(goal, provider=None, on_event=None, thread_id=None, permission=None
             head_text = (head_text + "\n\n" if head_text else "") + "【早前对话摘要】\n" + use_summary["text"]
         head = [Message(role="system", content=head_text)] if head_text else []
         sent = head + prior_tail + [Message(role="user", content=goal)]
+        _notify({"type": "prompt_ready", "prior_messages": len(prior),
+                 "sent_messages": len(sent), "summary": bool(use_summary),
+                 "content": "上下文已准备"})
 
         loop = AgentLoop(reasoner, toolhub,
                          max_steps=settings.get("max_steps", 64),
@@ -248,13 +293,16 @@ def run_turn(goal, provider=None, on_event=None, thread_id=None, permission=None
         # 存档：拼回全本（prior 全量 + 本轮新消息），摘要单独存 config，不丢历史。
         new_turn = sent[len(head) + len(prior_tail):]
         full_convo = prior + new_turn
-        thread_cfg = {"provider": provider_name}
+        thread_cfg = {"provider": provider_name,
+                      "workspace": thread_ws or workspace}   # 项目式侧栏按此分组
         if summary:
             thread_cfg["summary"] = summary
         pt = getattr(reasoner, "last_prompt_tokens", None)
         if pt is not None:                 # 记录本轮真实占用，供切线程时按线程显示圆环
             thread_cfg["context"] = {"prompt_tokens": pt, "window": _provider_window(provider_name)}
         threads_mod.save_thread(str(DATA / "threads"), thread_id, thread_cfg, full_convo)
+        _notify({"type": "turn_saved", "thread_id": thread_id,
+                 "messages": len(full_convo), "content": "对话已保存"})
         return thread_id, final
     finally:
         toolhub.close()

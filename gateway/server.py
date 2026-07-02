@@ -33,6 +33,16 @@ DANGEROUS = {"run_command", "write_file", "edit_file", "move_path", "delete_path
 # 待确认的权限请求：id -> {"event": Event, "result": bool}
 PENDING = {}
 
+# 正在跑的回合：thread_id -> {"cancel": threading.Event(), "finished": threading.Event()}
+# 同线程再来一发 → 先 cancel 上一发 + 等它退出，避免两个 run_turn 并发写同一存档。
+RUNNING = {}
+RUNNING_LOCK = threading.Lock()
+
+
+class TurnCancelled(Exception):
+    """真取消信号：客户端断线或同线程新请求覆盖时，从 emit 里抛出来，
+    穿透 reasoner.on_delta / loop 的每一步 on_event，逼停整个回合。"""
+
 
 def load_json(p, d):
     try:
@@ -72,7 +82,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(self._state())
         if path == "/api/workspaces":
             return self._json({"current": runner.current_workspace(),
-                               "names": runner.list_workspaces()})
+                               "names": runner.list_workspaces(),
+                               "archived": runner.archived_workspaces()})
         if path == "/api/settings":
             return self._json(self._settings_get())
         if path == "/api/mcp/tools":
@@ -125,6 +136,10 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/threads/rename":
             threads_mod.rename_thread(str(DATA / "threads"), body.get("id", ""), body.get("title", ""))
             return self._json({"ok": True})
+        if path == "/api/threads/archive":
+            threads_mod.set_archived(str(DATA / "threads"), body.get("id", ""),
+                                     body.get("archived", True))
+            return self._json({"ok": True})
         if path == "/api/permission":
             entry = PENDING.get(body.get("id"))
             if entry:
@@ -133,11 +148,23 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({"ok": True})
         if path in ("/api/workspace/switch", "/api/workspace/create"):
             return self._json(self._ws_set(body.get("name")))
+        if path == "/api/workspace/archive":
+            return self._json(self._ws_call(runner.set_workspace_archived,
+                                            body.get("name"),
+                                            body.get("archived", True)))
         if path == "/api/workspace/rename":
-            return self._json(self._ws_call(runner.rename_workspace,
-                                            body.get("old"), body.get("new")))
+            out = self._ws_call(runner.rename_workspace,
+                                body.get("old"), body.get("new"))
+            if "error" not in out:      # 线程归属跟着项目改名走
+                threads_mod.retag_workspace(str(DATA / "threads"),
+                                            body.get("old"), body.get("new"))
+            return self._json(out)
         if path == "/api/workspace/delete":
-            return self._json(self._ws_call(runner.delete_workspace, body.get("name")))
+            out = self._ws_call(runner.delete_workspace, body.get("name"))
+            if "error" not in out:      # 被删项目的线程回落到「对话」（default）
+                threads_mod.retag_workspace(str(DATA / "threads"),
+                                            body.get("name"), "default")
+            return self._json(out)
         return self._json({"error": "not found"}, 404)
 
     def _upload(self):
@@ -230,7 +257,8 @@ class Handler(BaseHTTPRequestHandler):
             "skills": skills,
             "threads": threads_mod.list_threads(str(DATA / "threads")),
             "workspace": {"current": runner.current_workspace(),
-                          "names": runner.list_workspaces()},
+                          "names": runner.list_workspaces(),
+                          "archived": runner.archived_workspaces()},
         }
 
     def _toggle_mcp(self, name, enabled):
@@ -380,7 +408,8 @@ class Handler(BaseHTTPRequestHandler):
     def _ws_set(self, name):
         try:
             cur = runner.set_workspace(name)
-            return {"ok": True, "current": cur, "names": runner.list_workspaces()}
+            return {"ok": True, "current": cur, "names": runner.list_workspaces(),
+                    "archived": runner.archived_workspaces()}
         except Exception as e:  # noqa: BLE001 含非法名(ValueError)与写盘/建目录失败(OSError)
             return {"error": str(e)}
 
@@ -388,7 +417,8 @@ class Handler(BaseHTTPRequestHandler):
         try:
             fn(*args)
             return {"ok": True, "current": runner.current_workspace(),
-                    "names": runner.list_workspaces()}
+                    "names": runner.list_workspaces(),
+                    "archived": runner.archived_workspaces()}
         except Exception as e:  # noqa: BLE001
             return {"error": str(e)}
 
@@ -397,39 +427,128 @@ class Handler(BaseHTTPRequestHandler):
         provider = body.get("provider") or None
         thread_id = body.get("thread_id") or None
         bypass = bool(body.get("bypass"))
+        started = time.time()
+        # SSE 头：HTTP/1.0(stdlib 默认) + close_delimited；不要发 keep-alive，否则 socket
+        # 永远不关 → 客户端读不到 EOF、streamChat 的 finally 不执行、每轮泄一条连接。
         self.send_response(200)
         self.send_header("Content-Type", "text/event-stream; charset=utf-8")
         self.send_header("Cache-Control", "no-cache")
+        self.send_header("Connection", "close")
+        self.send_header("X-Accel-Buffering", "no")
         self.send_header("Access-Control-Allow-Origin", "*")
         self.end_headers()
+        self.close_connection = True   # 保险：do_POST 返回后 stdlib 立刻关 socket
 
-        def emit(e):
+        tid = thread_id or time.strftime("%Y%m%d-%H%M%S")
+
+        # —— 同线程闸：若 tid 已有回合在跑，先请它退出，再接手。
+        cancel = threading.Event()      # 我们这一发的取消信号
+        finished = threading.Event()    # 我们这一发的完成信号
+        with RUNNING_LOCK:
+            prev = RUNNING.get(tid)
+            RUNNING[tid] = {"cancel": cancel, "finished": finished}
+        if prev:
+            prev["cancel"].set()
+            prev["finished"].wait(timeout=30)   # 上一发把 toolhub.close() 走完再进
+
+        seq = 0
+        closed = False
+        write_lock = threading.Lock()
+        last_emit = {"type": "open", "at": started}
+
+        def emit(e, record=True):
+            nonlocal seq, closed
+            # 真取消：断线 or 被后来者顶掉 → 通过在 emit 里抛异常，
+            # 沿 loop 的每一步 on_event / reasoner 的 on_delta 冒回 run_turn 的 finally，
+            # 由此 toolhub.close() 收 MCP 子进程、不再烧 token/跑工具。
+            if record and (closed or cancel.is_set()):
+                raise TurnCancelled()
+            now = time.time()
+            payload = dict(e or {})
+            payload.setdefault("type", "event")
             try:
-                self.wfile.write(("data: " + json.dumps(e, ensure_ascii=False) + "\n\n").encode("utf-8"))
-                self.wfile.flush()
-            except (BrokenPipeError, OSError):
-                pass
+                with write_lock:
+                    if closed:
+                        return
+                    seq += 1
+                    payload["seq"] = seq
+                    payload["ts"] = int(now * 1000)
+                    payload["elapsed_ms"] = int((now - started) * 1000)
+                    if record:
+                        last_emit["type"] = payload.get("type")
+                        last_emit["at"] = now
+                    event_name = str(payload.get("type") or "event").replace("\n", "_")
+                    frame = "id: %d\nevent: %s\ndata: %s\n\n" % (
+                        seq, event_name, json.dumps(payload, ensure_ascii=False))
+                    self.wfile.write(frame.encode("utf-8"))
+                    self.wfile.flush()
+            except (BrokenPipeError, OSError, ValueError):
+                closed = True
+
+        def heartbeat():
+            # record=False 的 heartbeat 不会抛 TurnCancelled，只把心跳丢给对端；
+            # 一旦 closed=True，就跟着退出，绝不写已关闭的 socket。
+            while not closed and not cancel.is_set():
+                for _ in range(50):                     # 分片睡，取消响应更快
+                    if closed or cancel.is_set():
+                        return
+                    time.sleep(0.1)
+                idle_ms = int((time.time() - last_emit["at"]) * 1000)
+                try:
+                    emit({"type": "heartbeat", "idle_ms": idle_ms,
+                          "last_event": last_emit["type"]}, record=False)
+                except TurnCancelled:
+                    return
+
+        hb = threading.Thread(target=heartbeat, daemon=True)
+        hb.start()
+        try:
+            emit({"type": "sse_open", "phase": "connected", "message": "SSE 已连接"})
+        except TurnCancelled:
+            pass
 
         def permission(call):
-            # 安全工具直接放行；危险工具在“绕过”关闭时弹确认并阻塞等待用户决定
             if bypass or call.name not in DANGEROUS:
                 return True
+            if closed or cancel.is_set():        # 断线后不再发 permission_request
+                return False
             pid = uuid.uuid4().hex[:12]
             ev = threading.Event()
             PENDING[pid] = {"event": ev, "result": False}
-            emit({"type": "permission_request", "id": pid,
-                  "name": call.name, "arguments": call.arguments})
-            ev.wait(timeout=300)
+            try:
+                emit({"type": "permission_request", "id": pid,
+                      "name": call.name, "arguments": call.arguments})
+            except TurnCancelled:
+                PENDING.pop(pid, None); raise
+            # 分片等：每秒查一次断线/取消，别死等 300 秒
+            for _ in range(300):
+                if ev.wait(1):
+                    break
+                if closed or cancel.is_set():
+                    PENDING.pop(pid, None)
+                    return False
             return PENDING.pop(pid, {}).get("result", False)
 
-        tid = thread_id or time.strftime("%Y%m%d-%H%M%S")
         emit({"type": "thread", "id": tid})
+        cancelled_by_client = False
         try:
             runner.run_turn(goal, provider=provider, on_event=emit,
                             thread_id=tid, permission=permission)
+        except TurnCancelled:
+            cancelled_by_client = True
         except Exception as e:  # noqa: BLE001
-            emit({"type": "error", "message": str(e)})
-        emit({"type": "done"})
+            try: emit({"type": "error", "message": str(e)})
+            except TurnCancelled: pass
+        # 未发过 done 就没成功；断线时对端读不到也无所谓，但顺路发一发。
+        try:
+            emit({"type": "done", "cancelled": cancelled_by_client}, record=False)
+        except TurnCancelled:
+            pass
+        closed = True
+        finished.set()
+        with RUNNING_LOCK:
+            if RUNNING.get(tid, {}).get("finished") is finished:
+                RUNNING.pop(tid, None)
 
 
 def main():
