@@ -12,3 +12,4 @@ __pycache__/
 /web/icons.svg
 /web/vite.svg
 /numba-cache/
+data/skills/_enabled.json
