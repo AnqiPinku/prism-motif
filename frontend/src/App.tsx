@@ -9,6 +9,33 @@ import {
 
 // 历史标题里可能截进附件行（旧存档），显示前清掉
 const cleanTitle = (s: string) => s.replace(/\[音频文件:[^\]]*\]?/g, '').trim()
+
+type ThreadInfo = { id: string; title?: string; archived?: boolean; workspace?: string; mtime?: number }
+
+// 侧栏相对时间（epoch 秒 → 4 小时 / 2 天 / 3 周…）
+function relTime(sec?: number) {
+  if (!sec) return ''
+  const d = Date.now() / 1000 - sec
+  if (d < 60) return '刚刚'
+  if (d < 3600) return Math.floor(d / 60) + ' 分钟'
+  if (d < 86400) return Math.floor(d / 3600) + ' 小时'
+  if (d < 7 * 86400) return Math.floor(d / 86400) + ' 天'
+  if (d < 30 * 86400) return Math.floor(d / 86400 / 7) + ' 周'
+  return Math.floor(d / 86400 / 30) + ' 个月'
+}
+
+function elapsedLabel(ms: number) {
+  const total = Math.max(0, Math.floor(ms / 1000))
+  const m = Math.floor(total / 60)
+  const s = total % 60
+  return m ? `${m}m ${s}s` : `${s}s`
+}
+
+function msLabel(ms?: number) {
+  if (ms == null) return ''
+  if (ms < 1000) return `${ms}ms`
+  return elapsedLabel(ms)
+}
 import Settings, { type SettingsData } from './Settings'
 import Onboarding from './Onboarding'
 
@@ -16,16 +43,35 @@ import Onboarding from './Onboarding'
 const drag = inTauri ? { 'data-tauri-drag-region': '' } : {}
 
 // Resizable sidebar bounds (px); width persists in localStorage.
-const NAV_KEY = 'prism.navWidth', NAV_DEFAULT = 300, NAV_MIN = 240, NAV_MAX = 440
+const NAV_KEY = 'prism.navWidth', NAV_COLLAPSED_KEY = 'prism.navCollapsed'
+const NAV_DEFAULT = 300, NAV_MIN = 240, NAV_MAX = 440
 
 const I = ({ n, s }: { n: string; s?: number }) => (
   <span className="material-symbols-outlined" style={s ? { fontSize: s } : undefined} aria-hidden>{n}</span>
 )
 
 type Chip = { kind: 'chip'; tone: 'ok' | 'err' | 'run'; label: string; detail?: string }
+type ProcessingPhase = 'connecting' | 'thinking' | 'generating' | 'tool' | 'retry'
+type RunTone = 'run' | 'ok' | 'err' | 'info'
+type RunTool = { id: string; name: string; tone: RunTone; durationMs?: number; contentChars?: number }
+type RunSummary = { kind: 'run'; durationMs: number; status: 'ok' | 'err'; tools: RunTool[]; reason?: string }
+type RunMeta = {
+  provider?: string; model?: string; workspace?: string; step?: number; maxSteps?: number;
+  toolCount?: number; promptPct?: number; promptTokens?: number; contextWindow?: number;
+  ttftMs?: number; outputChars?: number; heartbeatIdleMs?: number; lastEvent?: string;
+}
+type RunActiveState =
+  | { status: 'connecting'; requestedAt: number; phase: 'connecting'; work: string; tools: RunTool[]; meta: RunMeta }
+  | { status: 'running'; startedAt: number; phase: ProcessingPhase; work: string; tools: RunTool[]; meta: RunMeta }
+type RunState =
+  | { status: 'idle' }
+  | RunActiveState
+  | { status: 'done'; startedAt: number; endedAt: number; tools: RunTool[]; reason?: string }
+  | { status: 'error'; startedAt: number; endedAt: number; tools: RunTool[]; reason?: string }
 type Tile = { label: string; value: string; unit?: string }
 type Item =
   | Chip
+  | RunSummary
   | { kind: 'trace'; text: string }
   | { kind: 'perm'; id: string; label: string; decided?: string }
   | { kind: 'metrics'; title: string; tiles: Tile[] }
@@ -61,17 +107,19 @@ export default function App() {
   const [state, setState] = useState<State | null>(null)
   const [reaper, setReaper] = useState<ReaperStatus | null>(null)
   const [settings, setSettings] = useState<SettingsData | null>(null)
-  const [provider, setProvider] = useState('')
   const [threadId, setThreadId] = useState<string | null>(null)
   const [msgs, setMsgs] = useState<Msg[]>([])
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
+  const [processingNow, setProcessingNow] = useState(Date.now())
+  const [run, setRun] = useState<RunState>({ status: 'idle' })
   const [bypass, setBypassState] = useState(() => localStorage.getItem('pm_trust') === '1')
   const setBypass = (v: boolean) => { setBypassState(v); localStorage.setItem('pm_trust', v ? '1' : '0') }
   const [statusOpen, setStatusOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [onboarding, setOnboarding] = useState(false)
   const abort = useRef<AbortController | null>(null)
+  const runRef = useRef<RunState>({ status: 'idle' })
   const msgsRef = useRef<HTMLDivElement>(null)
 
   // 聊天附音频：+ 号选文件 → 传给 gateway 落盘 → 显示为附件胶囊，路径发送时才拼进消息
@@ -99,7 +147,13 @@ export default function App() {
     const v = parseInt(localStorage.getItem(NAV_KEY) || '', 10)
     return Number.isFinite(v) ? Math.min(NAV_MAX, Math.max(NAV_MIN, v)) : NAV_DEFAULT
   })
+  const [navCollapsed, setNavCollapsed] = useState(() => localStorage.getItem(NAV_COLLAPSED_KEY) === '1')
   useEffect(() => { localStorage.setItem(NAV_KEY, String(navW)) }, [navW])
+  const toggleNavCollapsed = () => setNavCollapsed((v) => {
+    const next = !v
+    localStorage.setItem(NAV_COLLAPSED_KEY, next ? '1' : '0')
+    return next
+  })
   const dragRef = useRef<{ startX: number; startW: number } | null>(null)
   const onNavDrag = useCallback((e: PointerEvent) => {
     const d = dragRef.current; if (!d) return
@@ -124,7 +178,6 @@ export default function App() {
   const loadState = useCallback(async () => {
     const s = await getJSON<State>('/api/state')
     setState(s)
-    setProvider((p) => p || s.providers.default)
   }, [])
   const loadReaper = useCallback(async () => {
     try { setReaper(await getJSON<ReaperStatus>('/api/reaper/status')) } catch { /* ignore */ }
@@ -151,15 +204,155 @@ export default function App() {
     if (el) el.scrollTop = el.scrollHeight
   }, [msgs])
 
+  const runActive = run.status === 'connecting' || run.status === 'running'
+  useEffect(() => {
+    if (!runActive) return
+    setProcessingNow(Date.now())
+    const id = window.setInterval(() => setProcessingNow(Date.now()), 1000)
+    return () => window.clearInterval(id)
+  }, [runActive])
+
   const patchLast = (fn: (m: Msg) => Msg) =>
     setMsgs((prev) => prev.map((m, i) => (i === prev.length - 1 ? fn(m) : m)))
 
+  const setRunState = useCallback((updater: RunState | ((prev: RunState) => RunState)) => {
+    const next = typeof updater === 'function' ? (updater as (p: RunState) => RunState)(runRef.current) : updater
+    runRef.current = next
+    setRun(next)
+  }, [])
+
+  const isActiveRun = (r: RunState): r is RunActiveState =>
+    r.status === 'connecting' || r.status === 'running'
+
+  const acceptRun = (phase: ProcessingPhase, work: string, meta?: Partial<RunMeta>) => {
+    const now = Date.now()
+    setProcessingNow(now)
+    setRunState((prev) => {
+      if (prev.status === 'running') {
+        return { ...prev, phase, work, meta: { ...prev.meta, ...(meta || {}) } }
+      }
+      if (prev.status === 'connecting') {
+        return {
+          status: 'running',
+          startedAt: now,
+          phase,
+          work,
+          tools: prev.tools,
+          meta: { ...prev.meta, ...(meta || {}) },
+        }
+      }
+      return {
+        status: 'running',
+        startedAt: now,
+        phase,
+        work,
+        tools: [],
+        meta: { ...(meta || {}) },
+      }
+    })
+  }
+
+  const updateRunMeta = (meta: Partial<RunMeta>) => setRunState((prev) =>
+    isActiveRun(prev) ? { ...prev, meta: { ...prev.meta, ...meta } } : prev)
+
+  const upsertRunTool = (tool: RunTool) => setRunState((prev) => {
+    if (!isActiveRun(prev)) return prev
+    const idx = prev.tools.findIndex((t) => t.id === tool.id)
+    const tools = idx < 0 ? [...prev.tools, tool].slice(-6) : prev.tools.map((t, i) => (i === idx ? { ...t, ...tool } : t))
+    return { ...prev, tools }
+  })
+
+  const finishRun = (status: 'ok' | 'err' = 'ok', reason?: string) => {
+    const current = runRef.current
+    if (!isActiveRun(current)) return
+    const end = Date.now()
+    const start = current.status === 'running' ? current.startedAt : current.requestedAt
+    const summary: RunSummary = {
+      kind: 'run',
+      durationMs: Math.max(0, end - start),
+      status,
+      reason,
+      tools: current.tools,
+    }
+    setProcessingNow(end)
+    setRunState(status === 'ok'
+      ? { status: 'done', startedAt: start, endedAt: end, tools: current.tools, reason }
+      : { status: 'error', startedAt: start, endedAt: end, tools: current.tools, reason })
+    setSending(false)
+    patchLast((m) => ({
+      ...m,
+      items: [summary, ...m.items.filter((it) => it.kind !== 'run')],
+    }))
+  }
+
   const onEvent = (e: ChatEvent) => {
-    if (e.type === 'thread') setThreadId(e.id)
-    else if (e.type === 'delta') patchLast((m) => ({ ...m, text: m.text + (e.text || '') }))
-    else if (e.type === 'tool_call')
+    if (e.type === 'sse_open') {
+      setRunState((prev) => prev.status === 'connecting'
+        ? { ...prev, work: e.message || 'SSE 已连接，等待服务端接受请求' }
+        : prev)
+    }
+    else if (e.type === 'heartbeat') {
+      updateRunMeta({ heartbeatIdleMs: e.idle_ms, lastEvent: e.last_event })
+    }
+    else if (e.type === 'thread') {
+      acceptRun('thinking', '线程已建立，等待模型响应')
+      setThreadId(e.id)
+    }
+    else if (e.type === 'turn_start') {
+      acceptRun('thinking', e.content || '正在初始化会话', {
+        provider: e.provider,
+        model: e.model,
+        workspace: e.workspace,
+      })
+    }
+    else if (e.type === 'mcp_start') {
+      acceptRun('thinking', e.content || '正在连接 MCP 服务')
+    }
+    else if (e.type === 'mcp_ready') {
+      acceptRun('thinking', e.content || 'MCP 工具已就绪', { toolCount: e.tool_count })
+    }
+    else if (e.type === 'prompt_ready') {
+      acceptRun('thinking', e.content || '上下文已准备')
+    }
+    else if (e.type === 'loop_start') {
+      acceptRun('thinking', 'Agent 循环已开始', { maxSteps: e.max_steps, toolCount: e.tool_count })
+    }
+    else if (e.type === 'model_start') {
+      acceptRun('thinking', `第 ${e.step || 1} 步请求模型`, { step: e.step, toolCount: e.tool_count })
+    }
+    else if (e.type === 'model_first_delta') {
+      acceptRun('generating', '正在生成回复', { step: e.step, ttftMs: e.ttft_ms })
+    }
+    else if (e.type === 'model_done') {
+      updateRunMeta({ step: e.step, outputChars: e.delta_chars })
+    }
+    else if (e.type === 'tool_batch') {
+      acceptRun('tool', `模型请求 ${e.count || 0} 个工具`, { step: e.step })
+    }
+    else if (e.type === 'delta') {
+      acceptRun('generating', '正在生成回复')
+      patchLast((m) => ({ ...m, text: m.text + (e.text || '') }))
+    }
+    else if (e.type === 'tool_call') {
+      acceptRun('tool', `正在执行 ${e.name}`)
+      upsertRunTool({ id: e.id || e.name, name: e.name, tone: 'run' })
       patchLast((m) => ({ ...m, items: [...m.items, { kind: 'chip', tone: 'run', label: e.name }] }))
-    else if (e.type === 'tool_result')
+    }
+    else if (e.type === 'tool_start') {
+      acceptRun('tool', `正在执行 ${e.name}`)
+      upsertRunTool({ id: e.id || e.name, name: e.name, tone: 'run' })
+    }
+    else if (e.type === 'tool_result') {
+      acceptRun('thinking', '等待模型继续')
+      if (e.name) {
+        upsertRunTool({
+          id: e.id || e.name,
+          name: e.name,
+          tone: e.is_error ? 'err' : 'ok',
+          durationMs: e.duration_ms,
+          contentChars: e.content_chars,
+        })
+      }
       patchLast((m) => {
         const items = [...m.items]
         for (let i = items.length - 1; i >= 0; i--) {
@@ -174,14 +367,40 @@ export default function App() {
         if (metrics) items.push({ kind: 'metrics', ...metrics })
         return { ...m, items }
       })
-    else if (e.type === 'permission_request')
+    }
+    else if (e.type === 'permission_request') {
+      acceptRun('tool', `等待确认 ${e.name}`)
       patchLast((m) => ({ ...m, items: [...m.items, { kind: 'perm', id: e.id, label: e.name }] }))
-    else if (e.type === 'retry' || e.type === 'compaction')
+    }
+    else if (e.type === 'context') {
+      const contextMeta = {
+        promptPct: e.pct,
+        promptTokens: e.prompt_tokens,
+        contextWindow: e.window,
+      }
+      if (isActiveRun(runRef.current)) updateRunMeta(contextMeta)
+      else acceptRun('thinking', '上下文已准备', contextMeta)
+    }
+    else if (e.type === 'retry') {
+      acceptRun('retry', e.content || '模型调用重试中')
       patchLast((m) => ({ ...m, items: [...m.items, { kind: 'trace', text: e.content }] }))
+    }
+    else if (e.type === 'compaction') {
+      acceptRun('thinking', '正在整理上下文')
+      patchLast((m) => ({ ...m, items: [...m.items, { kind: 'trace', text: e.content }] }))
+    }
+    else if (e.type === 'loop_done') {
+      updateRunMeta({ step: e.steps })
+    }
     else if (e.type === 'final')
       patchLast((m) => (m.text ? m : { ...m, text: e.text || '' }))
-    else if (e.type === 'error')
+    else if (e.type === 'done') {
+      finishRun('ok')
+    }
+    else if (e.type === 'error') {
       patchLast((m) => ({ ...m, text: '出错：' + (e.message || '') }))
+      finishRun('err', e.message)
+    }
   }
 
   const send = async () => {
@@ -193,13 +412,30 @@ export default function App() {
     setAtts([])
     setMsgs((m) => [...m, { role: 'user', text: goal, items: [] }, { role: 'assistant', text: '', items: [] }])
     setSending(true)
+    const requestedAt = Date.now()
+    setProcessingNow(requestedAt)
+    setRunState({
+      status: 'connecting',
+      requestedAt,
+      phase: 'connecting',
+      work: '正在连接模型服务',
+      tools: [],
+      meta: {},
+    })
     abort.current = new AbortController()
     try {
-      await streamChat({ goal, provider, thread_id: threadId, bypass }, onEvent, abort.current.signal)
+      await streamChat({ goal, provider: state?.providers.default || settings?.default, thread_id: threadId, bypass }, onEvent, abort.current.signal)
     } catch (err) {
-      if ((err as Error).name !== 'AbortError')
+      if ((err as Error).name === 'AbortError') {
+        finishRun('err', '已停止')                                  // 收敛为终态、停计时器
+      } else {
+        finishRun('err', String(err))
         patchLast((m) => ({ ...m, text: '请求失败：' + err }))
+      }
     } finally {
+      // 走到 finally 时如果 run 还是 active（干净退出但没收到 done——修 SSE 前的旧问题
+      // 已由 sawTerminal 抛错拦住，这里作最后兜底）
+      if (isActiveRun(runRef.current)) finishRun('ok')
       setSending(false)
       abort.current = null
       loadState()
@@ -219,6 +455,9 @@ export default function App() {
     type Raw = { role: string; content?: string | null; tool_call_id?: string; tool_calls?: { id?: string; name: string }[] }
     const data = await getJSON<{ messages: Raw[] }>('/api/threads/' + encodeURIComponent(id))
     setThreadId(id)
+    // 静默切到该对话所属项目（记忆按工作区隔离，续聊要用对的域）
+    const t = (state?.threads || []).find((x) => x.id === id)
+    if (t) switchWsSilent(t.workspace && wsNames.includes(t.workspace) ? t.workspace : 'default')
     // 从存档重建：同一回合的 assistant/tool 消息合并成一个气泡，工具链恢复成 chips + 指标卡
     const out: Msg[] = []
     const byCallId = new Map<string, Chip>()
@@ -254,13 +493,297 @@ export default function App() {
   // 线程行 ⋯ 菜单：两段式删除确认（WebView2 的原生 confirm 不可靠，不用）
   const [menuFor, setMenuFor] = useState<string | null>(null)
   const [confirmDel, setConfirmDel] = useState(false)
+  const [renamingThread, setRenamingThread] = useState<string | null>(null)
+  const [threadRenameVal, setThreadRenameVal] = useState('')
   const openMenu = (id: string | null) => { setMenuFor(id); setConfirmDel(false) }
+  // 菜单：点外部才关闭（mouseleave 会在移向菜单项的路上误关，导致点击落空）
+  useEffect(() => {
+    if (!menuFor && !wsMenuFor) return
+    const onDown = (e: MouseEvent) => {
+      if (!(e.target as Element | null)?.closest?.('.threadmenu,.tmenu')) {
+        setMenuFor(null); setWsMenuFor(null); setConfirmDel(false); setWsConfirmDel(false)
+      }
+    }
+    document.addEventListener('mousedown', onDown)
+    return () => document.removeEventListener('mousedown', onDown)
+  })
   const delThread = async (id: string) => {
     await postJSON('/api/threads/delete', { id })
     openMenu(null)
     if (threadId === id) newChat()
     loadState()
   }
+  const archThread = async (id: string, archived: boolean) => {
+    await postJSON('/api/threads/archive', { id, archived })
+    openMenu(null)
+    loadState()
+  }
+  const renameThread = async (id: string) => {
+    const title = threadRenameVal.trim()
+    setRenamingThread(null)
+    if (!title) return
+    await postJSON('/api/threads/rename', { id, title })
+    loadState()
+  }
+
+  // 展开/折叠是纯视图状态、与"当前项目"解耦（CC 行为：多个项目可同时展开）；持久化
+  const [expandedWs, setExpandedWs] = useState<Set<string>>(() => {
+    try { return new Set<string>(JSON.parse(localStorage.getItem('pm_wsExpanded') || '[]')) } catch { return new Set() }
+  })
+  const toggleWs = (ws: string) => setExpandedWs((prev) => {
+    const next = new Set(prev)
+    if (next.has(ws)) next.delete(ws); else next.add(ws)
+    localStorage.setItem('pm_wsExpanded', JSON.stringify([...next]))
+    return next
+  })
+  useEffect(() => {   // 首次进来至少展开当前工作区
+    const cur = state?.workspace.current
+    if (cur) setExpandedWs((prev) => (prev.size ? prev : new Set([cur])))
+  }, [state?.workspace.current])
+  // 每个分区独立的「展开显示」（超过 6 条）
+  const [showAllWs, setShowAllWs] = useState<Set<string>>(new Set())
+  const toggleShowAll = (ws: string) => setShowAllWs((prev) => {
+    const next = new Set(prev)
+    if (next.has(ws)) next.delete(ws); else next.add(ws)
+    return next
+  })
+  // 「项目」标签：整组折叠
+  const [projGroupCollapsed, setProjGroupCollapsed] = useState(() => localStorage.getItem('pm_projGroup') === '1')
+  const toggleProjGroup = () => setProjGroupCollapsed((v) => { localStorage.setItem('pm_projGroup', v ? '0' : '1'); return !v })
+  // 工作区切换只在实际行动时静默发生：✎ 在项目里新建 / 打开该项目的对话
+  const switchWsSilent = async (name: string) => {
+    if (name === state?.workspace.current) return
+    await postJSON('/api/workspace/switch', { name })
+    loadState()
+  }
+  const newChatIn = async (ws: string) => {
+    await switchWsSilent(ws)
+    newChat()
+    setExpandedWs((prev) => (prev.has(ws) ? prev : new Set(prev).add(ws)))
+  }
+
+  // 项目管理：新建（label 行 + 号，内联输入）/ 重命名（内联）/ 删除（两段式）
+  const [creatingWs, setCreatingWs] = useState(false)
+  const [wsName, setWsName] = useState('')
+  const skipCreateWsBlur = useRef(false)
+  const [wsMenuFor, setWsMenuFor] = useState<string | null>(null)
+  const [wsConfirmDel, setWsConfirmDel] = useState(false)
+  const [renamingWs, setRenamingWs] = useState<string | null>(null)
+  const [renameVal, setRenameVal] = useState('')
+  const [archiveOpen, setArchiveOpen] = useState(false)
+  const [archiveConfirmFor, setArchiveConfirmFor] = useState<string | null>(null)
+  const [archiveExpandedWs, setArchiveExpandedWs] = useState<Set<string>>(new Set())
+  const openWsMenu = (ws: string | null) => { setWsMenuFor(ws); setWsConfirmDel(false); openMenu(null) }
+  const openThreadMenu = (id: string | null) => { openMenu(id); setWsMenuFor(null); setWsConfirmDel(false) }
+  const cancelCreateWs = () => { setCreatingWs(false); setWsName('') }
+  const toggleCreateWs = () => {
+    setCreatingWs((open) => {
+      const next = !open
+      setWsName('')
+      if (next) {
+        setProjGroupCollapsed(false)
+        openWsMenu(null)
+      }
+      return next
+    })
+  }
+  const createWs = async () => {
+    if (skipCreateWsBlur.current) {
+      skipCreateWsBlur.current = false
+      return
+    }
+    const name = wsName.trim()
+    setCreatingWs(false); setWsName('')
+    if (!name) return
+    await postJSON('/api/workspace/create', { name })   // 创建即切换
+    setExpandedWs((prev) => {
+      const next = new Set(prev).add(name)
+      localStorage.setItem('pm_wsExpanded', JSON.stringify([...next]))
+      return next
+    })
+    newChat(); loadState()
+  }
+  const renameWs = async (old: string) => {
+    const name = renameVal.trim()
+    setRenamingWs(null)
+    if (!name || name === old) return
+    await postJSON('/api/workspace/rename', { old, new: name })
+    loadState()
+  }
+  const delWs = async (ws: string) => {
+    if (state?.workspace.current === ws)               // 后端拒删当前：先切回「对话」
+      await postJSON('/api/workspace/switch', { name: 'default' })
+    await postJSON('/api/workspace/delete', { name: ws })
+    openWsMenu(null); newChat(); loadState()
+  }
+  const archWs = async (ws: string, archived: boolean) => {
+    await postJSON('/api/workspace/archive', { name: ws, archived })
+    if (archived && state?.workspace.current === ws) {
+      await postJSON('/api/workspace/switch', { name: 'default' })
+      newChat()
+    }
+    openWsMenu(null)
+    loadState()
+  }
+
+  const threadsNewest: ThreadInfo[] = (state?.threads || []).slice().reverse()
+  const wsNames = state?.workspace.names || ['default']
+  const archivedWs = new Set(state?.workspace.archived || [])
+  const activeWsNames = wsNames.filter((w) => w !== 'default' && !archivedWs.has(w))
+  const archivedWsNames = wsNames.filter((w) => w !== 'default' && archivedWs.has(w))
+  const archivedThreads = threadsNewest.filter((t) => t.archived)
+  const archiveCount = archivedWsNames.length + archivedThreads.length
+  // 线程归组：所属工作区已不存在的归入「对话」
+  const wsOf = (t: ThreadInfo) => (t.workspace && wsNames.includes(t.workspace) ? t.workspace : 'default')
+  const archiveThreadsOfWs = (ws: string) => threadsNewest.filter((t) => wsOf(t) === ws)
+  const toggleArchiveWs = (ws: string) => setArchiveExpandedWs((prev) => {
+    const next = new Set(prev)
+    if (next.has(ws)) next.delete(ws); else next.add(ws)
+    return next
+  })
+  const activeThreadsIn = (ws: string) => threadsNewest.filter((t) => !t.archived && wsOf(t) === ws)
+  const archiveThreadsIn = async (ws: string) => {
+    const ids = activeThreadsIn(ws).map((t) => t.id)
+    for (const id of ids) await postJSON('/api/threads/archive', { id, archived: true })
+    openWsMenu(null)
+    loadState()
+  }
+  const deleteThreadsIn = async (ws: string) => {
+    const ids = activeThreadsIn(ws).map((t) => t.id)
+    for (const id of ids) await postJSON('/api/threads/delete', { id })
+    if (threadId && ids.includes(threadId)) newChat()
+    openWsMenu(null)
+    loadState()
+  }
+  const archiveAllProjects = async () => {
+    const names = [...activeWsNames]
+    if (names.includes(state?.workspace.current || 'default')) {
+      await postJSON('/api/workspace/switch', { name: 'default' })
+      newChat()
+    }
+    for (const name of names) await postJSON('/api/workspace/archive', { name, archived: true })
+    openWsMenu(null)
+    loadState()
+  }
+  const deleteAllProjects = async () => {
+    const names = [...activeWsNames]
+    if (names.includes(state?.workspace.current || 'default')) {
+      await postJSON('/api/workspace/switch', { name: 'default' })
+      newChat()
+    }
+    for (const name of names) await postJSON('/api/workspace/delete', { name })
+    openWsMenu(null)
+    loadState()
+  }
+  useEffect(() => {
+    if (!archiveOpen) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setArchiveOpen(false)
+        setArchiveConfirmFor(null)
+      }
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [archiveOpen])
+
+  // 分区的线程列表（展开时显示；6 条 + 每分区独立的展开显示）
+  const sectionThreads = (list: ThreadInfo[], ws: string) =>
+    list.length ? (
+      <>
+        {(showAllWs.has(ws) ? list : list.slice(0, 6)).map(renderThread)}
+        {list.length > 6 && (
+          <button className="showmore" onClick={() => toggleShowAll(ws)}>
+            {showAllWs.has(ws) ? '收起' : '展开显示'}
+          </button>
+        )}
+      </>
+    ) : <div className="wsempty">还没有对话</div>
+
+  // 一个项目分区：头行 = 纯展开/折叠（多个项目可同时开）+ 悬停 ✎ 新建对话 + ⋯ 菜单
+  const wsSection = (ws: string, archived = false) => {
+    const cur = ws === (state?.workspace.current || 'default')
+    const open = expandedWs.has(ws)
+    const list = threadsNewest.filter((t) => !t.archived && wsOf(t) === ws)
+    return (
+      <div key={ws} className={'wsec' + (archived ? ' archived-ws' : '')}>
+        {renamingWs === ws ? (
+          <div className="wsinput">
+            <input autoFocus value={renameVal} maxLength={24}
+              onChange={(e) => setRenameVal(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') renameWs(ws); if (e.key === 'Escape') setRenamingWs(null) }}
+              onBlur={() => renameWs(ws)} />
+          </div>
+        ) : (
+          <div className="wsrow">
+            <button className={'wshead' + (cur ? ' cur' : '')} onClick={() => toggleWs(ws)}>
+              <I n={open ? 'folder_open' : 'folder'} s={18} /><span className="wn">{ws}</span>
+              {!open && <span className="wschev"><I n="chevron_right" s={17} /></span>}
+            </button>
+            <button className="tmenu wsnew" aria-label="在此项目新建对话" title="在此项目新建对话"
+              onClick={(e) => { e.stopPropagation(); newChatIn(ws) }}>
+              <I n="edit_square" s={16} />
+            </button>
+            <button className="tmenu wsmenu" aria-label="项目选项"
+              onClick={(e) => { e.stopPropagation(); openWsMenu(wsMenuFor === ws ? null : ws) }}>
+              <I n="more_horiz" s={18} />
+            </button>
+            {wsMenuFor === ws && (
+              <div className="threadmenu">
+                <button onClick={() => archWs(ws, !archived)}>
+                  <I n={archived ? 'unarchive' : 'archive'} s={17} />{archived ? '取消归档' : '归档项目'}
+                </button>
+                <button onClick={() => { setRenamingWs(ws); setRenameVal(ws); openWsMenu(null) }}>
+                  <I n="edit" s={17} />重命名
+                </button>
+                <button className="danger"
+                  onClick={() => (wsConfirmDel ? delWs(ws) : setWsConfirmDel(true))}>
+                  <I n="delete" s={17} />{wsConfirmDel ? '确认删除？' : '删除项目'}
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+        {open && sectionThreads(list, ws)}
+      </div>
+    )
+  }
+
+  const renderThread = (t: ThreadInfo) => (
+    renamingThread === t.id ? (
+      <div key={t.id} className="thread editing">
+        <input autoFocus className="tedit" value={threadRenameVal} maxLength={48}
+          onChange={(e) => setThreadRenameVal(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') renameThread(t.id); if (e.key === 'Escape') setRenamingThread(null) }}
+          onBlur={() => renameThread(t.id)} />
+      </div>
+    ) : (
+      <div key={t.id} className={'thread' + (t.id === threadId ? ' active' : '')}>
+        <button className="topen" onClick={() => openThread(t.id)}>
+          <span className="t">{cleanTitle(t.title || '') || t.id}</span>
+        </button>
+        <span className="ttime">{relTime(t.mtime)}</span>
+        <button className="tmenu" aria-label="对话选项"
+          onClick={(e) => { e.stopPropagation(); openThreadMenu(menuFor === t.id ? null : t.id) }}>
+          <I n="more_horiz" s={18} />
+        </button>
+        {menuFor === t.id && (
+          <div className="threadmenu">
+            <button onClick={() => { setRenamingThread(t.id); setThreadRenameVal(cleanTitle(t.title || '') || t.id); openMenu(null) }}>
+              <I n="edit" s={17} />重命名
+            </button>
+            <button onClick={() => archThread(t.id, !t.archived)}>
+              <I n={t.archived ? 'unarchive' : 'archive'} s={17} />{t.archived ? '取消归档' : '归档'}
+            </button>
+            <button className="danger"
+              onClick={() => (confirmDel ? delThread(t.id) : setConfirmDel(true))}>
+              <I n="delete" s={17} />{confirmDel ? '确认删除？' : '删除'}
+            </button>
+          </div>
+        )}
+      </div>
+    )
+  )
 
   const geminiOk = !!settings?.gemini?.has_key
   const perceptionOn = !!state?.mcp.find((m) => m.name === 'music-perception')?.enabled
@@ -285,6 +808,7 @@ export default function App() {
       )}
       <div className="cbox">
       <input ref={fileRef} type="file" style={{ display: 'none' }}
+        name="audio-upload" aria-label="添加音频"
         accept="audio/*,.wav,.mp3,.flac,.ogg,.aif,.aiff,.m4a"
         onChange={(e) => onPickAudio(e.target.files?.[0])} />
       <button className="iconbtn" aria-label="添加音频" title="添加音频文件（分析 / 转 MIDI）"
@@ -292,17 +816,13 @@ export default function App() {
         {uploading ? <span className="spinning"><I n="progress_activity" /></span> : <I n="add" />}
       </button>
       <textarea
+        name="message"
+        aria-label="消息内容"
         rows={1} value={input} placeholder="描述你的音乐想法，交给 Prism…"
         onChange={(e) => setInput(e.target.value)}
         onInput={(e) => { const t = e.currentTarget; t.style.height = 'auto'; t.style.height = Math.min(t.scrollHeight, 140) + 'px'; t.style.overflowY = t.scrollHeight > 140 ? 'auto' : 'hidden' }}
         onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() } }}
       />
-      <span className="modelchip">
-        <I n="bolt" s={16} />
-        <select value={provider} onChange={(e) => setProvider(e.target.value)}>
-          {(state?.providers.names || []).map((n) => <option key={n} value={n}>{n}</option>)}
-        </select>
-      </span>
       <button className="fab" aria-label={sending ? '停止' : '发送'}
         disabled={!sending && !input.trim() && atts.length === 0}
         onClick={() => (sending ? abort.current?.abort() : send())}>
@@ -315,9 +835,15 @@ export default function App() {
   return (
     <div className="app">
       <header className="bar" {...drag}>
-        <button className="iconbtn" aria-label="菜单"><I n="menu" /></button>
-        <span className="logo" {...drag}><I n="graphic_eq" /></span>
-        <span className="brand" {...drag}>Prism Motif</span>
+        <div className="brandgroup">
+          <button className="iconbtn navtoggle" aria-label={navCollapsed ? '展开侧边栏' : '收起侧边栏'}
+            title={navCollapsed ? '展开侧边栏' : '收起侧边栏'}
+            aria-pressed={!navCollapsed}
+            onClick={toggleNavCollapsed}>
+            <span className="sidebar-icon" aria-hidden />
+          </button>
+          <span className="brand" {...drag}>Prism Motif</span>
+        </div>
         <span className="spacer" {...drag} />
         <div className="statuswrap">
           <button className="statuschip" onClick={() => setStatusOpen((v) => !v)}>
@@ -339,34 +865,94 @@ export default function App() {
         {inTauri && <WinControls />}
       </header>
 
-      <div className="body">
+      <div className={'body' + (navCollapsed ? ' nav-collapsed' : '')}>
+        {!navCollapsed && (
+          <>
         <aside className="nav" style={{ '--nav-w': `${navW}px` } as CSSProperties}>
-          <button className="ws"><I n="folder_open" s={20} />{state?.workspace.current || 'default'}<span className="spacer" /><I n="expand_more" s={20} /></button>
           <button className="newchat" onClick={newChat}><I n="add" />新对话</button>
-          <div className="navlabel">最近</div>
-          {(state?.threads || []).slice().reverse().map((t) => (
-            <div key={t.id} className={'thread' + (t.id === threadId ? ' active' : '')}>
-              <button className="topen" onClick={() => openThread(t.id)}>
-                <I n="chat_bubble" s={20} /><span className="t">{cleanTitle(t.title || '') || t.id}</span>
+          <div className="wsrow navgroup">
+            <button className="convhead" onClick={toggleProjGroup}>
+              项目<I n={projGroupCollapsed ? 'chevron_right' : 'expand_more'} s={16} />
+            </button>
+            <button className="tmenu wsnew" aria-label={creatingWs ? '取消新建项目' : '新建项目'} title={creatingWs ? '取消新建项目' : '新建项目'}
+              onPointerDown={(e) => { if (creatingWs) { skipCreateWsBlur.current = true; e.preventDefault() } }}
+              onClick={(e) => { e.stopPropagation(); toggleCreateWs() }}>
+              <I n={creatingWs ? 'close' : 'create_new_folder'} s={17} />
+            </button>
+            <button className="tmenu wsmenu" aria-label="项目分组选项"
+              onClick={(e) => { e.stopPropagation(); openWsMenu(wsMenuFor === '__projects__' ? null : '__projects__') }}>
+              <I n="more_horiz" s={18} />
+            </button>
+            {wsMenuFor === '__projects__' && (
+              <div className="threadmenu">
+                <button onClick={archiveAllProjects}>
+                  <I n="archive" s={17} />归档全部项目
+                </button>
+                <button className="danger"
+                  onClick={() => (wsConfirmDel ? deleteAllProjects() : setWsConfirmDel(true))}>
+                  <I n="delete" s={17} />{wsConfirmDel ? '确认删除全部？' : '删除全部项目'}
+                </button>
+              </div>
+            )}
+          </div>
+          {creatingWs && (
+            <div className="wsinput create">
+              <I n="create_new_folder" s={18} />
+              <input id="new-project-name" name="new-project-name" autoFocus value={wsName} placeholder="项目名称" maxLength={24}
+                onChange={(e) => setWsName(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') createWs(); if (e.key === 'Escape') cancelCreateWs() }}
+                onBlur={createWs} />
+              <button className="mini" aria-label="确认新建项目" title="确认"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={createWs}>
+                <I n="check" s={17} />
               </button>
-              <button className="tmenu" aria-label="对话选项"
-                onClick={(e) => { e.stopPropagation(); openMenu(menuFor === t.id ? null : t.id) }}>
-                <I n="more_horiz" s={18} />
+              <button className="mini" aria-label="取消新建项目" title="取消"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={cancelCreateWs}>
+                <I n="close" s={17} />
               </button>
-              {menuFor === t.id && (
-                <div className="threadmenu" onMouseLeave={() => openMenu(null)}>
-                  <button className="danger"
-                    onClick={() => (confirmDel ? delThread(t.id) : setConfirmDel(true))}>
-                    <I n="delete" s={17} />{confirmDel ? '确认删除？' : '删除'}
-                  </button>
-                </div>
-              )}
             </div>
-          ))}
+          )}
+          {!projGroupCollapsed && activeWsNames.map((ws) => wsSection(ws))}
+
+          <div className="wsrow conv">
+            <button className="convhead" onClick={() => toggleWs('default')}>
+              对话<I n={expandedWs.has('default') ? 'expand_more' : 'chevron_right'} s={16} />
+            </button>
+            <button className="tmenu wsnew" aria-label="新建对话" title="新建对话"
+              onClick={(e) => { e.stopPropagation(); newChatIn('default') }}>
+              <I n="edit_square" s={16} />
+            </button>
+            <button className="tmenu wsmenu" aria-label="对话分组选项"
+              onClick={(e) => { e.stopPropagation(); openWsMenu(wsMenuFor === 'default' ? null : 'default') }}>
+              <I n="more_horiz" s={18} />
+            </button>
+            {wsMenuFor === 'default' && (
+              <div className="threadmenu">
+                <button onClick={() => archiveThreadsIn('default')}>
+                  <I n="archive" s={17} />归档所有对话
+                </button>
+                <button className="danger"
+                  onClick={() => (wsConfirmDel ? deleteThreadsIn('default') : setWsConfirmDel(true))}>
+                  <I n="delete" s={17} />{wsConfirmDel ? '确认删除所有？' : '删除所有对话'}
+                </button>
+              </div>
+            )}
+          </div>
+          {expandedWs.has('default') &&
+            sectionThreads(threadsNewest.filter((t) => !t.archived && wsOf(t) === 'default'), 'default')}
+
+          <button className="archbtn" onClick={() => setArchiveOpen(true)}>
+            <I n="archive" s={16} />
+            <span>已归档</span>
+          </button>
         </aside>
 
         <div className="nav-handle" style={{ left: navW - 4 }} onPointerDown={startNavDrag}
           role="separator" aria-orientation="vertical" aria-label="调整侧边栏宽度" />
+          </>
+        )}
 
         <main className="chat">
           {msgs.length === 0 ? (
@@ -378,30 +964,159 @@ export default function App() {
           ) : (
             <>
               <div className="msgs" ref={msgsRef}>
-                {msgs.map((m, i) =>
-                  m.role === 'user' ? (
-                    <UserBubble key={i} text={m.text} />
-                  ) : (
+                {msgs.map((m, i) => {
+                  if (m.role === 'user') return <UserBubble key={i} text={m.text} />
+                  const chips = m.items.filter((it): it is Chip => it.kind === 'chip')
+                  const runs = m.items.filter((it): it is RunSummary => it.kind === 'run')
+                  const others = m.items.filter((it) => it.kind !== 'chip' && it.kind !== 'run')
+                  const currentRun = isActiveRun(run) ? run : null
+                  const isCurrent = !!currentRun && i === msgs.length - 1
+                  const liveStartedAt = currentRun?.status === 'running' ? currentRun.startedAt : currentRun?.requestedAt
+                  const liveElapsed = liveStartedAt ? elapsedLabel(processingNow - liveStartedAt) : '0s'
+                  return (
                     <div key={i} className="a">
-                      <div className="ava"><I n="graphic_eq" s={18} /></div>
                       <div className="abody">
+                        {!isCurrent && runs.map((run, j) => <RunSummaryLine key={j} run={run} />)}
+                        {isCurrent && currentRun && (
+                          <RunPanel
+                            phase={currentRun.phase}
+                            elapsed={liveElapsed}
+                            currentWork={currentRun.work}
+                            tools={currentRun.tools}
+                            meta={currentRun.meta}
+                          />
+                        )}
+                        {chips.length > 0 && <ToolBar chips={chips} />}
                         {m.text && (
                           <div className="atext md">
                             <ReactMarkdown remarkPlugins={[remarkGfm]}>{m.text}</ReactMarkdown>
                           </div>
                         )}
-                        <ToolBar chips={m.items.filter((it): it is Chip => it.kind === 'chip')} />
-                        {m.items.filter((it) => it.kind !== 'chip').map((it, j) => <Rendered key={j} it={it} onDecide={decide} />)}
+                        {others.map((it, j) => <Rendered key={j} it={it} onDecide={decide} />)}
                       </div>
                     </div>
-                  ),
-                )}
+                  )
+                })}
               </div>
               <div className="composer">{composer}</div>
             </>
           )}
         </main>
       </div>
+
+      {archiveOpen && (
+        <div className="archive-bg" onMouseDown={(e) => {
+          if (e.target === e.currentTarget) {
+            setArchiveOpen(false)
+            setArchiveConfirmFor(null)
+          }
+        }}>
+          <section className="archive-dialog" role="dialog" aria-modal="true" aria-labelledby="archive-title">
+            <div className="archive-head">
+              <div>
+                <h2 id="archive-title">已归档</h2>
+                <p>{archiveCount} 个项目或对话</p>
+              </div>
+              <button className="iconbtn" aria-label="关闭已归档"
+                onClick={() => { setArchiveOpen(false); setArchiveConfirmFor(null) }}>
+                <I n="close" />
+              </button>
+            </div>
+            <div className="archive-body">
+              {archivedWsNames.length > 0 && (
+                <section className="archive-sec">
+                  <h3>项目</h3>
+                  <div className="archive-list">
+                    {archivedWsNames.map((ws) => (
+                      <div className="archive-project" key={ws}>
+                        <div className="archive-row">
+                          <button className="archive-expand" aria-label={archiveExpandedWs.has(ws) ? '收起项目对话' : '展开项目对话'}
+                            onClick={() => toggleArchiveWs(ws)}>
+                            <I n={archiveExpandedWs.has(ws) ? 'expand_more' : 'chevron_right'} s={18} />
+                          </button>
+                          <span className="archive-ico"><I n="folder" s={20} /></span>
+                          <button className="archive-main link" onClick={() => toggleArchiveWs(ws)}>
+                            <div className="archive-name">{ws}</div>
+                            <div className="archive-meta">{archiveThreadsOfWs(ws).length} 个对话</div>
+                          </button>
+                          <button className="archive-act" onClick={() => archWs(ws, false)}>
+                            <I n="unarchive" s={17} />恢复
+                          </button>
+                          <button className="archive-act danger"
+                            onClick={async () => {
+                              const key = `ws:${ws}`
+                              if (archiveConfirmFor === key) {
+                                await delWs(ws)
+                                setArchiveConfirmFor(null)
+                              } else setArchiveConfirmFor(key)
+                            }}>
+                            <I n="delete" s={17} />{archiveConfirmFor === `ws:${ws}` ? '确认删除' : '删除'}
+                          </button>
+                        </div>
+                        {archiveExpandedWs.has(ws) && (
+                          <div className="archive-sublist">
+                            {archiveThreadsOfWs(ws).length ? archiveThreadsOfWs(ws).map((t) => (
+                              <div className="archive-subrow" key={t.id}>
+                                <span className="archive-subico"><I n="chat_bubble" s={17} /></span>
+                                <button className="archive-main link" onClick={() => { setArchiveOpen(false); openThread(t.id) }}>
+                                  <div className="archive-name">{cleanTitle(t.title || '') || t.id}</div>
+                                  <div className="archive-meta">{relTime(t.mtime)}{t.archived ? ' · 已归档' : ''}</div>
+                                </button>
+                                {t.archived && (
+                                  <button className="archive-act" onClick={() => archThread(t.id, false)}>
+                                    <I n="unarchive" s={17} />恢复
+                                  </button>
+                                )}
+                              </div>
+                            )) : <div className="archive-subempty">还没有对话</div>}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              )}
+
+              {archivedThreads.length > 0 && (
+                <section className="archive-sec">
+                  <h3>对话</h3>
+                  <div className="archive-list">
+                    {archivedThreads.map((t) => (
+                      <div className="archive-row" key={t.id}>
+                        <span className="archive-ico"><I n="chat_bubble" s={20} /></span>
+                        <button className="archive-main link" onClick={() => { setArchiveOpen(false); openThread(t.id) }}>
+                          <div className="archive-name">{cleanTitle(t.title || '') || t.id}</div>
+                          <div className="archive-meta">{relTime(t.mtime)} · {wsOf(t) === 'default' ? '对话' : wsOf(t)}</div>
+                        </button>
+                        <button className="archive-act" onClick={() => archThread(t.id, false)}>
+                          <I n="unarchive" s={17} />恢复
+                        </button>
+                        <button className="archive-act danger"
+                          onClick={async () => {
+                            const key = `thread:${t.id}`
+                            if (archiveConfirmFor === key) {
+                              await delThread(t.id)
+                              setArchiveConfirmFor(null)
+                            } else setArchiveConfirmFor(key)
+                          }}>
+                          <I n="delete" s={17} />{archiveConfirmFor === `thread:${t.id}` ? '确认删除' : '删除'}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              )}
+
+              {archiveCount === 0 && (
+                <div className="archive-empty">
+                  <I n="archive" s={28} />
+                  <span>还没有归档项目或对话</span>
+                </div>
+              )}
+            </div>
+          </section>
+        </div>
+      )}
 
       {settingsOpen && state && (
         <Settings state={state} trust={bypass} setTrust={setBypass}
@@ -413,6 +1128,143 @@ export default function App() {
           onDone={() => { localStorage.setItem('pm_onboarded', '1'); setOnboarding(false); loadSettings() }} />
       )}
     </div>
+  )
+}
+
+function runToneIcon(tone: RunTone) {
+  if (tone === 'ok') return 'check_circle'
+  if (tone === 'err') return 'error'
+  if (tone === 'info') return 'info'
+  return 'progress_activity'
+}
+
+function phaseLabel(phase: ProcessingPhase) {
+  if (phase === 'connecting') return '连接中'
+  if (phase === 'retry') return '重试中'
+  return '已处理'
+}
+
+function RunPanel({
+  phase, elapsed, currentWork, tools, meta,
+}: {
+  phase: ProcessingPhase; elapsed: string; currentWork: string;
+  tools: RunTool[]; meta: RunMeta;
+}) {
+  const [open, setOpen] = useState(false)
+  const activeTools = tools.filter((t) => t.tone === 'run')
+  const failedTools = tools.filter((t) => t.tone === 'err').length
+  const metricChips: { key: string; icon: string; label: string; title?: string }[] = []
+  if (meta.provider || meta.model)
+    metricChips.push({ key: 'model', icon: 'memory', label: [meta.provider, meta.model].filter(Boolean).join(' · ') })
+  if (meta.workspace)
+    metricChips.push({ key: 'workspace', icon: meta.workspace === 'default' ? 'chat_bubble' : 'folder', label: meta.workspace === 'default' ? '对话' : meta.workspace })
+  if (meta.step)
+    metricChips.push({ key: 'step', icon: 'account_tree', label: `第 ${meta.step}${meta.maxSteps ? `/${meta.maxSteps}` : ''} 步` })
+  if (meta.toolCount != null)
+    metricChips.push({ key: 'tools', icon: 'construction', label: `${meta.toolCount} 个工具` })
+  if (meta.promptPct != null)
+    metricChips.push({
+      key: 'context',
+      icon: 'data_usage',
+      label: `上下文 ${Math.round(meta.promptPct * 100)}%`,
+      title: meta.promptTokens && meta.contextWindow ? `${meta.promptTokens} / ${meta.contextWindow} tokens` : undefined,
+    })
+
+  const headline = activeTools.length ? `${currentWork} · ${activeTools[0].name}` : currentWork
+  return (
+    <details className={`run-panel active ${phase}`} open={open} onToggle={(e) => setOpen(e.currentTarget.open)}>
+      <summary className="run-head" role="status" aria-live="polite">
+        <span className="run-bars" aria-hidden>
+          <span />
+          <span />
+          <span />
+        </span>
+        <span className="run-copy">
+          <span className="run-title">
+            <span>{phaseLabel(phase)}</span>
+            <span className="run-time">{elapsed}</span>
+          </span>
+          <span className="run-sub">{headline}</span>
+        </span>
+        <I n="expand_more" s={19} />
+      </summary>
+
+      <div className="run-body">
+        {metricChips.length > 0 && (
+          <div className="run-meta">
+            {metricChips.map((m) => (
+              <span className="run-pill" key={m.key} title={m.title}>
+                <I n={m.icon} s={15} />{m.label}
+              </span>
+            ))}
+          </div>
+        )}
+
+        {tools.length > 0 && (
+          <div className="run-section">
+            <div className="run-section-title">
+              <span>工具</span>
+              {activeTools.length > 0 && <span>{activeTools.length} 个运行中</span>}
+              {failedTools > 0 && <span className="bad">{failedTools} 个失败</span>}
+            </div>
+            {tools.slice(-4).map((tool) => (
+              <div className={`run-row ${tool.tone}`} key={tool.id}>
+                <span className="run-dot"><I n={runToneIcon(tool.tone)} s={15} /></span>
+                <span className="run-row-main">
+                  <span className="run-row-label">{tool.name}</span>
+                  {(tool.contentChars != null || tool.durationMs != null) && (
+                    <span className="run-row-detail">
+                      {tool.durationMs != null ? msLabel(tool.durationMs) : ''}
+                      {tool.contentChars != null ? `${tool.durationMs != null ? ' · ' : ''}${tool.contentChars} 字符` : ''}
+                    </span>
+                  )}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </details>
+  )
+}
+
+function RunSummaryLine({ run }: { run: RunSummary }) {
+  const toolCount = run.tools.length
+  const failedTools = run.tools.filter((t) => t.tone === 'err').length
+  const ok = run.status === 'ok'
+  const hasDetails = toolCount > 0 || !!run.reason
+  return (
+    <details className={`run-summary ${run.status}`}>
+      <summary>
+        <I n={ok ? 'check_circle' : 'error'} s={16} />
+        <span>{ok ? '已处理' : '处理失败'} {elapsedLabel(run.durationMs)}</span>
+        {toolCount > 0 && (
+          <span className="run-summary-note">
+            已运行 {toolCount} 个工具{failedTools ? ` · ${failedTools} 个失败` : ''}
+          </span>
+        )}
+        {hasDetails && <I n="expand_more" s={17} />}
+      </summary>
+      {hasDetails && (
+        <div className="run-summary-body">
+          {run.reason && <div className="run-summary-reason">{run.reason}</div>}
+          {run.tools.map((tool) => (
+            <div className={`run-row ${tool.tone}`} key={tool.id}>
+              <span className="run-dot"><I n={runToneIcon(tool.tone)} s={15} /></span>
+              <span className="run-row-main">
+                <span className="run-row-label">{tool.name}</span>
+                {(tool.durationMs != null || tool.contentChars != null) && (
+                  <span className="run-row-detail">
+                    {tool.durationMs != null ? msLabel(tool.durationMs) : ''}
+                    {tool.contentChars != null ? `${tool.durationMs != null ? ' · ' : ''}${tool.contentChars} 字符` : ''}
+                  </span>
+                )}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </details>
   )
 }
 
@@ -491,6 +1343,7 @@ function ToolBar({ chips }: { chips: Chip[] }) {
 }
 
 function Rendered({ it, onDecide }: { it: Item; onDecide: (id: string, allow: boolean) => void }) {
+  if (it.kind === 'run') return <RunSummaryLine run={it} />
   if (it.kind === 'trace') return <div className="trace">{it.text}</div>
   if (it.kind === 'metrics')
     return (

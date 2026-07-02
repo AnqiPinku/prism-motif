@@ -16,5 +16,6 @@
     "elide_tool_results": true,
     "elide_over_chars": 2000,
     "summarize": true
-  }
+  },
+  "archived_workspaces": []
 }

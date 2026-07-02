@@ -56,49 +56,66 @@ export default function Settings({ state, trust, setTrust, onClose, onSaved }:
   const toggleMcp = async (name: string, enabled: boolean) => { await postJSON('/api/mcp/toggle', { name, enabled }); onSaved() }
   const toggleSkill = async (name: string, enabled: boolean) => { await postJSON('/api/skills/toggle', { name, enabled }); onSaved() }
 
+  const providerNames = Object.keys(data?.providers || {})
   const provKeySet = !!data?.providers[pick]?.has_key
   const gKeySet = !!data?.gemini?.has_key
 
   return (
     <div className="modal-bg" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
+      <div className="modal settings-modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-head">
           <h2>设置</h2>
           <button className="iconbtn" aria-label="关闭" onClick={onClose}><Icon n="close" /></button>
         </div>
-        <div className="modal-body">
-          <div className="sec">
-            <h3>语言模型（大脑）</h3>
-            <div className="row2">
-              <div className="field"><label>默认模型</label>
-                <select value={def} onChange={(e) => setDef(e.target.value)}>
-                  {Object.keys(data?.providers || {}).map((n) => <option key={n} value={n}>{n}</option>)}
-                </select></div>
-              <div className="field"><label>配置哪个</label>
-                <select value={pick} onChange={(e) => data && fill(data, e.target.value)}>
-                  {Object.keys(data?.providers || {}).map((n) => <option key={n} value={n}>{n}</option>)}
-                </select></div>
+        <div className="modal-body settings-body">
+          <div className="sec settings-sec">
+            <div className="sec-title">
+              <h3>语言模型</h3>
+              <span className="softtag">默认：{def || '-'}</span>
+            </div>
+            <div className="field wide"><div className="field-title">默认模型</div>
+              <div className="choice-row" role="radiogroup" aria-label="默认模型">
+                {providerNames.map((n) => (
+                  <button key={n} className={'choice' + (def === n ? ' active' : '')}
+                    onClick={() => setDef(n)} type="button" role="radio" aria-checked={def === n}>
+                    {n}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="field wide"><div className="field-title">编辑配置</div>
+              <div className="choice-row" role="radiogroup" aria-label="编辑配置">
+                {providerNames.map((n) => (
+                  <button key={n} className={'choice' + (pick === n ? ' active' : '')}
+                    onClick={() => data && fill(data, n)} type="button" role="radio" aria-checked={pick === n}>
+                    {n}
+                  </button>
+                ))}
+              </div>
             </div>
             <div className="row2">
-              <div className="field"><label>Base URL</label><input value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} placeholder="如 https://api.deepseek.com" /></div>
-              <div className="field"><label>模型名称</label><input value={model} onChange={(e) => setModel(e.target.value)} placeholder="如 deepseek-chat" /></div>
+              <div className="field"><label htmlFor="provider-base-url">Base URL</label><input id="provider-base-url" value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} placeholder="https://api.deepseek.com" /></div>
+              <div className="field"><label htmlFor="provider-model">模型名称</label><input id="provider-model" value={model} onChange={(e) => setModel(e.target.value)} placeholder="deepseek-chat" /></div>
             </div>
-            <div className="field"><label>API Key<span className="keystate">{provKeySet ? '（已设置，留空则保留）' : '（未设置）'}</span></label>
-              <input type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder="粘贴 key，只存系统钥匙链" /></div>
+            <div className="field"><label htmlFor="provider-api-key">API Key<span className={'keypill' + (provKeySet ? ' ok' : '')}>{provKeySet ? '已设置' : '未设置'}</span></label>
+              <input id="provider-api-key" type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder="留空保留当前 key" /></div>
           </div>
 
-          <div className="sec">
-            <h3>Gemini / 音频分析</h3>
-            <div className="field"><label>API Key<span className="keystate">{gKeySet ? '（已设置，留空则保留）' : '（未设置）'}</span></label>
-              <input type="password" value={gKey} onChange={(e) => setGKey(e.target.value)} placeholder="粘贴 Gemini / 中转 key" /></div>
+          <div className="sec settings-sec">
+            <div className="sec-title">
+              <h3>音频分析</h3>
+              <span className={'keypill' + (gKeySet ? ' ok' : '')}>{gKeySet ? 'Gemini 已配置' : '未配置'}</span>
+            </div>
+            <div className="field"><label htmlFor="gemini-api-key">API Key</label>
+              <input id="gemini-api-key" type="password" value={gKey} onChange={(e) => setGKey(e.target.value)} placeholder="留空保留当前 key" /></div>
             {data?.gemini?.env_only && <button className="btn small" onClick={importEnv}>从环境变量导入到钥匙链</button>}
             <div className="row2">
-              <div className="field"><label>Base URL（中转，留空=Google 原生）</label><input value={gBase} onChange={(e) => setGBase(e.target.value)} placeholder="如 https://your-relay/v1" /></div>
-              <div className="field"><label>模型名称</label><input value={gModel} onChange={(e) => setGModel(e.target.value)} placeholder="如 gemini-2.5-flash" /></div>
+              <div className="field"><label htmlFor="gemini-base-url">Base URL</label><input id="gemini-base-url" value={gBase} onChange={(e) => setGBase(e.target.value)} placeholder="Google 原生可留空" /></div>
+              <div className="field"><label htmlFor="gemini-model">模型名称</label><input id="gemini-model" value={gModel} onChange={(e) => setGModel(e.target.value)} placeholder="gemini-2.5-flash" /></div>
             </div>
           </div>
 
-          <div className="sec">
+          <div className="sec settings-sec">
             <h3>MCP 服务</h3>
             {state.mcp.map((m) => (
               <div className="togglerow" key={m.name}>{m.name}<span className="tag" />
@@ -106,21 +123,20 @@ export default function Settings({ state, trust, setTrust, onClose, onSaved }:
             ))}
           </div>
 
-          <div className="sec">
+          <div className="sec settings-sec">
             <h3>技能</h3>
-            {state.skills.length === 0 && <div className="keystate">（暂无技能）</div>}
+            {state.skills.length === 0 && <div className="keystate">暂无技能</div>}
             {state.skills.map((s) => (
               <div className="togglerow" key={s.name}>{s.name}<span className="tag">{s.disclosure === 'full' ? '常驻' : '按需'}</span>
                 <button className={'switch' + (s.enabled ? '' : ' off')} aria-label={s.name} onClick={() => toggleSkill(s.name, !s.enabled)} /></div>
             ))}
           </div>
 
-          <div className="sec">
+          <div className="sec settings-sec">
             <h3>行为</h3>
             <div className="togglerow">信任模式
-              <span className="tag">危险操作不再逐个确认</span>
+              <span className="tag">跳过危险操作确认</span>
               <button className={'switch' + (trust ? '' : ' off')} aria-label="信任模式" onClick={() => setTrust(!trust)} /></div>
-            <div className="keystate">开启后，执行命令、写/删文件等危险操作会直接放行，不再弹确认。</div>
           </div>
 
           <div className="btnrow">
