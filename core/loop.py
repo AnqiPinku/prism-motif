@@ -3,6 +3,12 @@
 import time
 
 from .contracts import Message
+try:
+    from .reasoners.openai_compat import RetriableStreamError
+except ImportError:                                              # 单元测试里可能不带默认 reasoner
+    class RetriableStreamError(Exception): pass
+
+MAX_STREAM_RETRIES = 3   # 中途瞬时错误重试次数（含首次），前置条件：还没吐 delta / 工具
 
 
 class AgentLoop:
@@ -28,15 +34,36 @@ class AgentLoop:
                     delta_stats["first"] = True
                     self.on_event({"type": "model_first_delta", "step": step,
                                    "ttft_ms": int((time.time() - model_start) * 1000)})
+                    # 三段式：首个 delta 前发 content_start，前端建立一个 streaming 文本块
+                    self.on_event({"type": "content_start", "step": step, "block_type": "text"})
+                    self.on_event({"type": "status", "state": "streaming"})
                 delta_stats["chars"] += len(t or "")
                 delta_stats["chunks"] += 1
                 self.on_event({"type": "delta", "text": t, "step": step})
 
+            self.on_event({"type": "status", "state": "thinking",
+                           "verb": "请求模型 · 第 %d 步" % step})
             self.on_event({"type": "model_start", "step": step,
                            "message_count": len(messages), "tool_count": len(specs)})
-            decision = self.reasoner.decide(
-                messages, specs,
-                on_delta=on_delta)
+
+            # 中途瞬时错误（provider 500/429 等）+ 前置条件（未吐字/未调工具）→ 整轮重跑
+            decision = None
+            for attempt in range(1, MAX_STREAM_RETRIES + 1):
+                try:
+                    decision = self.reasoner.decide(messages, specs, on_delta=on_delta)
+                    break
+                except RetriableStreamError as e:
+                    if attempt >= MAX_STREAM_RETRIES:
+                        raise
+                    self.on_event({"type": "retry", "attempt": attempt,
+                                   "max": MAX_STREAM_RETRIES, "kind": "stream",
+                                   "content": "流内错误重试：" + str(e.why)})
+                    model_start = time.time()
+                    delta_stats = {"chars": 0, "chunks": 0, "first": False}
+
+            # 首个 delta 之后有 content_start，此处配对 content_end（tool 决策没吐字则跳过）
+            if delta_stats["first"]:
+                self.on_event({"type": "content_end", "step": step, "block_type": "text"})
             self.on_event({"type": "model_done", "step": step,
                            "kind": decision.kind,
                            "duration_ms": int((time.time() - model_start) * 1000),
@@ -47,6 +74,9 @@ class AgentLoop:
                 # 把最终回答也存进历史，否则线程里看不到、多轮也记不住自己的回复
                 messages.append(Message(role="assistant", content=decision.text or ""))
                 self.on_event({"type": "final", "text": decision.text})
+                self.on_event({"type": "message_complete", "step": step,
+                               "delta_chars": delta_stats["chars"]})
+                self.on_event({"type": "status", "state": "idle"})
                 self.on_event({"type": "loop_done", "steps": step,
                                "duration_ms": int((time.time() - turn_start) * 1000),
                                "reason": "final"})
@@ -57,12 +87,11 @@ class AgentLoop:
                                     tool_calls=decision.tool_calls))
             calls = decision.tool_calls or []
             self.on_event({"type": "tool_batch", "step": step, "count": len(calls)})
+            self.on_event({"type": "status", "state": "tool_executing",
+                           "verb": "调用 %d 个工具" % len(calls)})
             for index, call in enumerate(calls, start=1):
                 tool_start = time.time()
                 self.on_event({"type": "tool_call", "id": call.id, "name": call.name,
-                               "arguments": call.arguments, "step": step,
-                               "index": index, "count": len(calls)})
-                self.on_event({"type": "tool_start", "id": call.id, "name": call.name,
                                "arguments": call.arguments, "step": step,
                                "index": index, "count": len(calls)})
 

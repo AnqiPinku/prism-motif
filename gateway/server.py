@@ -470,35 +470,71 @@ class Handler(BaseHTTPRequestHandler):
         closed = False
         write_lock = threading.Lock()
         last_emit = {"type": "open", "at": started}
+        # delta 合帧：50ms 窗口内的 delta 累积成一个大 delta 事件，避免每 token 一帧 →
+        # 前端 React 重渲染 + ReactMarkdown 逐帧解析 → 长回答卡顿。
+        delta_buf = {"text": "", "step": None, "since": 0.0}
+        DELTA_WINDOW_MS = 50
+
+        def _write_frame(payload):
+            nonlocal seq
+            seq += 1
+            payload["seq"] = seq
+            now_ms = int(time.time() * 1000)
+            payload["ts"] = now_ms
+            payload["elapsed_ms"] = int((time.time() - started) * 1000)
+            event_name = str(payload.get("type") or "event").replace("\n", "_")
+            frame = "id: %d\nevent: %s\ndata: %s\n\n" % (
+                seq, event_name, json.dumps(payload, ensure_ascii=False))
+            self.wfile.write(frame.encode("utf-8"))
+            self.wfile.flush()
+
+        def _flush_delta_locked():
+            """在 write_lock 内调用：把 buffer 里累积的 delta 拍平发一个大帧。"""
+            if not delta_buf["text"]:
+                return
+            _write_frame({"type": "delta", "text": delta_buf["text"],
+                          "step": delta_buf["step"], "coalesced": True})
+            last_emit["type"] = "delta"; last_emit["at"] = time.time()
+            delta_buf["text"] = ""; delta_buf["step"] = None; delta_buf["since"] = 0.0
 
         def emit(e, record=True):
             nonlocal seq, closed
-            # 真取消：断线 or 被后来者顶掉 → 通过在 emit 里抛异常，
-            # 沿 loop 的每一步 on_event / reasoner 的 on_delta 冒回 run_turn 的 finally，
-            # 由此 toolhub.close() 收 MCP 子进程、不再烧 token/跑工具。
             if record and (closed or cancel.is_set()):
                 raise TurnCancelled()
             now = time.time()
             payload = dict(e or {})
             payload.setdefault("type", "event")
+            etype = payload.get("type")
             try:
                 with write_lock:
                     if closed:
                         return
-                    seq += 1
-                    payload["seq"] = seq
-                    payload["ts"] = int(now * 1000)
-                    payload["elapsed_ms"] = int((now - started) * 1000)
+                    # delta 累积：只有满窗（≥50ms）才 flush，其他类型事件到来时也强制 flush 保序
+                    if etype == "delta":
+                        if delta_buf["since"] == 0.0:
+                            delta_buf["since"] = now
+                            delta_buf["step"] = payload.get("step")
+                        delta_buf["text"] += payload.get("text") or ""
+                        if (now - delta_buf["since"]) * 1000 >= DELTA_WINDOW_MS:
+                            _flush_delta_locked()
+                        return
+                    # 非 delta：先把 buffer 里的 delta 吐出去（保持事件顺序），再发本事件
+                    _flush_delta_locked()
+                    _write_frame(payload)
                     if record:
-                        last_emit["type"] = payload.get("type")
+                        last_emit["type"] = etype
                         last_emit["at"] = now
-                    event_name = str(payload.get("type") or "event").replace("\n", "_")
-                    frame = "id: %d\nevent: %s\ndata: %s\n\n" % (
-                        seq, event_name, json.dumps(payload, ensure_ascii=False))
-                    self.wfile.write(frame.encode("utf-8"))
-                    self.wfile.flush()
             except (BrokenPipeError, OSError, ValueError):
                 closed = True
+
+        def force_flush_deltas():
+            """回合结束前调用：把最后一小段还没到 50ms 的 delta 吐掉。"""
+            try:
+                with write_lock:
+                    if not closed:
+                        _flush_delta_locked()
+            except (BrokenPipeError, OSError, ValueError):
+                pass
 
         def heartbeat():
             # record=False 的 heartbeat 不会抛 TurnCancelled，只把心跳丢给对端；
@@ -554,6 +590,7 @@ class Handler(BaseHTTPRequestHandler):
         except Exception as e:  # noqa: BLE001
             try: emit({"type": "error", "message": str(e)})
             except TurnCancelled: pass
+        force_flush_deltas()   # 把窗未满的尾巴吐掉，别让最后几个 token 卡住
         # 未发过 done 就没成功；断线时对端读不到也无所谓，但顺路发一发。
         try:
             emit({"type": "done", "cancelled": cancelled_by_client}, record=False)

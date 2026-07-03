@@ -30,19 +30,23 @@ export type ChatEvent = SseEnvelope & (
   | { type: 'model_start'; step?: number; message_count?: number; tool_count?: number }
   | { type: 'model_first_delta'; step?: number; ttft_ms?: number }
   | { type: 'model_done'; step?: number; kind?: string; duration_ms?: number; delta_chars?: number; delta_chunks?: number }
-  | { type: 'delta'; text: string; step?: number }
+  | { type: 'delta'; text: string; step?: number; coalesced?: boolean }
+  | { type: 'content_start'; step?: number; block_type?: string }
+  | { type: 'content_end'; step?: number; block_type?: string }
+  | { type: 'message_complete'; step?: number; delta_chars?: number }
+  | { type: 'status'; state: 'idle' | 'thinking' | 'streaming' | 'tool_executing' | 'permission_pending' | 'compacting'; verb?: string }
   | { type: 'tool_batch'; step?: number; count?: number }
   | { type: 'tool_call' | 'tool_start'; id?: string; name: string; arguments: unknown; step?: number; index?: number; count?: number }
   | { type: 'tool_result'; id?: string; name?: string; is_error?: boolean; content?: string; duration_ms?: number; content_chars?: number; permission?: string }
   | { type: 'permission_request'; id: string; name: string; arguments: unknown }
   | { type: 'context'; prompt_tokens: number; window: number; pct: number }
   | { type: 'compaction'; kind?: string; count?: number; content: string }
-  | { type: 'retry'; attempt?: number; max?: number; content: string }
+  | { type: 'retry'; attempt?: number; max?: number; retry_delay_ms?: number; kind?: 'connect' | 'stream'; content: string }
   | { type: 'final'; text: string }
   | { type: 'loop_done'; steps?: number; duration_ms?: number; reason?: string }
   | { type: 'turn_saved'; thread_id?: string; messages?: number; content?: string }
   | { type: 'error'; message: string }
-  | { type: 'done' }
+  | { type: 'done'; cancelled?: boolean }
 )
 
 // In the Tauri shell the UI is served from tauri:// (bundled), so the gateway is a
