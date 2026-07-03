@@ -474,6 +474,9 @@ class Handler(BaseHTTPRequestHandler):
         # 前端 React 重渲染 + ReactMarkdown 逐帧解析 → 长回答卡顿。
         delta_buf = {"text": "", "step": None, "since": 0.0}
         DELTA_WINDOW_MS = 50
+        # 超长 tool_result 截断阈值：只发前 2KB 给前端；全文本已在 threads 存档里，
+        # 需要看全文的话 UI 从 /api/threads/:id 拉。省带宽 + 前端 state 不吃满。
+        MAX_TOOL_RESULT_BYTES = 2048
 
         def _write_frame(payload):
             nonlocal seq
@@ -505,6 +508,13 @@ class Handler(BaseHTTPRequestHandler):
             payload = dict(e or {})
             payload.setdefault("type", "event")
             etype = payload.get("type")
+            # 截超长 tool_result：全文在存档，SSE 帧和前端 state 都不必扛
+            if etype == "tool_result":
+                c = payload.get("content") or ""
+                if len(c) > MAX_TOOL_RESULT_BYTES:
+                    payload["content"] = c[:MAX_TOOL_RESULT_BYTES]
+                    payload["truncated"] = True
+                    payload["original_chars"] = len(c)
             try:
                 with write_lock:
                     if closed:
