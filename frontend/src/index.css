@@ -184,9 +184,11 @@ body.nav-resizing{cursor:col-resize;user-select:none}
 .run-panel[open] .run-head>.material-symbols-outlined:last-child{transform:rotate(180deg)}
 .run-bars{width:24px;height:24px;border-radius:50%;background:var(--primary-container);display:inline-flex;align-items:center;justify-content:center;gap:2px;flex-shrink:0}
 .run-bars span{width:2.5px;height:7px;border-radius:999px;background:var(--primary)}
+/* 错落跳动的音波感：三根竖线依次相位 —— animation 短属性会重置 delay，
+   nth-child delay 必须放在同权重（或更高）的选择器里才不会被覆盖 */
 .run-panel.active .run-bars span{animation:run-bar 1s ease-in-out infinite}
-.run-bars span:nth-child(2){animation-delay:.14s}
-.run-bars span:nth-child(3){animation-delay:.28s}
+.run-panel.active .run-bars span:nth-child(2){animation-delay:.14s}
+.run-panel.active .run-bars span:nth-child(3){animation-delay:.28s}
 .run-copy{display:flex;flex-direction:column;gap:2px;min-width:0}
 .run-title{display:flex;align-items:center;gap:8px;font-size:14.5px;color:var(--on-surface);font-weight:500}
 .run-time{color:var(--muted);font-weight:400}
@@ -231,7 +233,7 @@ details.run-row>.tooldetail{margin:2px 6px 6px}
 .run-panel+.toolbar{margin-top:0;margin-bottom:10px}
 .run-summary+.toolbar{margin-top:0;margin-bottom:10px}
 .toolbar+.atext{margin-top:10px}
-@keyframes run-bar{0%,100%{height:7px;opacity:.55}50%{height:15px;opacity:1}}
+@keyframes run-bar{0%,100%{height:5px;opacity:.7}50%{height:11px;opacity:1}}
 /* markdown 渲染态（不再保留源码换行，由块级元素排版） */
 .atext.md{white-space:normal}
 /* 流式期间用纯文本渲染避开 ReactMarkdown 逐帧重解析（长回答再也不卡） */
