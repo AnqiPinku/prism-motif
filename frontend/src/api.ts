@@ -37,7 +37,7 @@ export type ChatEvent = SseEnvelope & (
   | { type: 'status'; state: 'idle' | 'thinking' | 'streaming' | 'tool_executing' | 'permission_pending' | 'compacting'; verb?: string }
   | { type: 'tool_batch'; step?: number; count?: number }
   | { type: 'tool_call' | 'tool_start'; id?: string; name: string; arguments: unknown; step?: number; index?: number; count?: number }
-  | { type: 'tool_result'; id?: string; name?: string; is_error?: boolean; content?: string; duration_ms?: number; content_chars?: number; permission?: string }
+  | { type: 'tool_result'; id?: string; name?: string; is_error?: boolean; content?: string; duration_ms?: number; content_chars?: number; permission?: string; truncated?: boolean; original_chars?: number }
   | { type: 'permission_request'; id: string; name: string; arguments: unknown }
   | { type: 'context'; prompt_tokens: number; window: number; pct: number }
   | { type: 'compaction'; kind?: string; count?: number; content: string }

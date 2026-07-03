@@ -53,7 +53,7 @@ const I = ({ n, s }: { n: string; s?: number }) => (
 type Chip = { kind: 'chip'; tone: 'ok' | 'err' | 'run'; label: string; detail?: string }
 type ProcessingPhase = 'connecting' | 'thinking' | 'generating' | 'tool' | 'retry'
 type RunTone = 'run' | 'ok' | 'err' | 'info'
-type RunTool = { id: string; name: string; tone: RunTone; durationMs?: number; contentChars?: number; detail?: string }
+type RunTool = { id: string; name: string; tone: RunTone; durationMs?: number; contentChars?: number; detail?: string; truncated?: boolean; originalChars?: number }
 type RunSummary = { kind: 'run'; durationMs: number; status: 'ok' | 'err'; tools: RunTool[]; reason?: string }
 type RunMeta = {
   provider?: string; model?: string; workspace?: string; step?: number; maxSteps?: number;
@@ -360,6 +360,8 @@ export default function App() {
           durationMs: e.duration_ms,
           contentChars: e.content_chars,
           detail: (e.content || '').trim(),                   // 详情随 RunSummary 一起归纳
+          truncated: e.truncated,                              // 服务端截过 2KB？UI 提供"看完整"
+          originalChars: e.original_chars,
         })
       }
       // 结构化的音频分析结果升级成指标卡（RunSummary 展开也能看原始 JSON）
@@ -990,7 +992,7 @@ export default function App() {
                   return (
                     <div key={i} className="a">
                       <div className="abody">
-                        {!isCurrent && runs.map((run, j) => <RunSummaryLine key={j} run={run} />)}
+                        {!isCurrent && runs.map((run, j) => <RunSummaryLine key={j} run={run} threadId={threadId} />)}
                         {isCurrent && currentRun && (
                           <RunPanel
                             phase={currentRun.phase}
@@ -1245,8 +1247,20 @@ function RunPanel({
   )
 }
 
-function RunSummaryLine({ run }: { run: RunSummary }) {
+function RunSummaryLine({ run, threadId }: { run: RunSummary; threadId?: string | null }) {
   const toolCount = run.tools.length
+  // "看完整"能力：截断的 tool 展开后点一下从 /api/threads/:id 拉全量替换 detail
+  const [fullDetails, setFullDetails] = useState<Record<string, string>>({})
+  const [loading, setLoading] = useState<string | null>(null)
+  const loadFull = async (toolId: string) => {
+    if (!threadId || fullDetails[toolId] || loading) return
+    setLoading(toolId)
+    try {
+      const data = await getJSON<{ messages: { role: string; tool_call_id?: string; content?: string }[] }>('/api/threads/' + encodeURIComponent(threadId))
+      const msg = (data.messages || []).find((m) => m.role === 'tool' && m.tool_call_id === toolId)
+      if (msg) setFullDetails((p) => ({ ...p, [toolId]: (msg.content || '').trim() }))
+    } finally { setLoading(null) }
+  }
   const failedTools = run.tools.filter((t) => t.tone === 'err').length
   const ok = run.status === 'ok'
   const hasDetails = toolCount > 0 || !!run.reason
@@ -1281,7 +1295,18 @@ function RunSummaryLine({ run }: { run: RunSummary }) {
                   </span>
                   <I n="expand_more" s={15} />
                 </summary>
-                <pre className="tooldetail">{tool.detail.length > 700 ? tool.detail.slice(0, 700) + ' …' : tool.detail}</pre>
+                {fullDetails[tool.id] ? (
+                  <pre className="tooldetail">{fullDetails[tool.id]}</pre>
+                ) : (
+                  <>
+                    <pre className="tooldetail">{tool.detail.length > 700 ? tool.detail.slice(0, 700) + ' …' : tool.detail}</pre>
+                    {tool.truncated && threadId && (
+                      <button className="tool-loadfull" onClick={() => loadFull(tool.id)} disabled={loading === tool.id}>
+                        {loading === tool.id ? '加载中…' : `查看完整（还有 ${(tool.originalChars || 0) - (tool.detail?.length || 0)} 字符）`}
+                      </button>
+                    )}
+                  </>
+                )}
               </details>
             ) : (
               <div className={`run-row ${tool.tone}`} key={tool.id}>

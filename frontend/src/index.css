@@ -217,6 +217,9 @@ details.run-row>summary::-webkit-details-marker{display:none}
 details.run-row>summary>.material-symbols-outlined:last-child{margin-left:auto;color:var(--muted);transition:transform .15s}
 details.run-row[open]>summary>.material-symbols-outlined:last-child{transform:rotate(180deg)}
 details.run-row>.tooldetail{margin:2px 6px 6px}
+.tool-loadfull{display:block;margin:2px 6px 6px;padding:6px 10px;font-size:12px;color:var(--primary);background:var(--surface-1);border:1px solid var(--outline-var);border-radius:8px;cursor:pointer}
+.tool-loadfull:hover:not(:disabled){background:var(--primary-container);color:var(--on-primary-container)}
+.tool-loadfull:disabled{opacity:.6;cursor:default}
 .run-row-main{min-width:0;display:flex;align-items:center;gap:8px;flex:1}
 .run-row-label{font-size:12.5px;color:var(--on-surface);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .run-row-detail{font-size:11.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
