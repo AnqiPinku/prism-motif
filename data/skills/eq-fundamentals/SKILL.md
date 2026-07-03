@@ -78,7 +78,7 @@ description: Trigger this skill when the user is mixing and describes a symptom 
 
 ## 关于 Kontakt 音色
 
-如果混的是 Kontakt 的采样乐器,**音色必须用户手动在 Kontakt UI 里加载**(NI 的设计,MCP 无法自动切库)。EQ 参数一样适用,但预设起点要按 Kontakt 里那个音色的原始频响调整。
+**Kontakt / Omnisphere 等重采样器的具体音色库必须在插件窗口内由用户手动加载**——NI 设计如此,MCP 只能 add_track_fx 挂上宿主,选不了具体 patch。 EQ 参数一样适用,但预设起点要按你在 Kontakt 里选的那个音色的原始频响调整。
 
 ## Anti-patterns
 

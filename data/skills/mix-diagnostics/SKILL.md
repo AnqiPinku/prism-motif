@@ -55,7 +55,7 @@ description: 当用户说"混音听起来浑/糊/刺/闷/薄/响度不够/低频
 每步用 `render_to_wav(out_path="master_bus_comp_2to1_thr-18.wav")` 显式命名,方便 A/B 对比。
 
 ## Kontakt / 采样器音色的限制
-如果诊断说"某乐器音色本身就闷/刺",直接告诉用户:"Kontakt 是 NI 设计的,必须你在 Kontakt 面板里手动选 patch,MCP 换不了。你换一个亮一点的 patch(比如从 Grandeur → Alicia's Keys),我这边继续跑测量。"不要假装能自动切换。
+如果诊断说"某乐器音色本身就闷/刺",告诉用户:**Kontakt / Omnisphere 等重采样器的具体音色库必须在插件窗口内由用户手动加载**——NI 设计如此,MCP 只能 add_track_fx 挂上宿主,选不了具体 patch。 请你在 Kontakt 面板里换一个亮一点的 patch(例:Grandeur → Alicia's Keys),我这边继续跑测量。
 
 ## Anti-patterns
 - **一次给 5 个 EQ 建议然后不复测**:改完用户不知道哪一刀有效。永远"一刀→测→下一刀"。

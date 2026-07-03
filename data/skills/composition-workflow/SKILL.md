@@ -73,7 +73,8 @@ description: 开头动作集：当用户带着模糊意图来写歌（"想写一
 
 ## 5. Kontakt / 音色说明（诚实边界）
 
-如果用户说"用某某钢琴音色" —— **明说：Kontakt 具体音色库必须用户自己在 Kontakt 界面里加载，NI 的设计就是这样，MCP 无法替你选**。你能做的：`list_installed_fx` 查有没有 Kontakt，`add_track_fx` 挂到轨 1，然后告诉用户："Kontakt 已挂在轨 1，请你手动选 Alicia's Keys / Noire / 你想用的音色。"
+如果用户说"用某某钢琴音色" —— **明说：**Kontakt / Omnisphere 等重采样器的具体音色库必须在插件窗口内由用户手动加载**——NI 设计如此,MCP 只能 add_track_fx 挂上宿主,选不了具体 patch。
+你能做的：`list_installed_fx` 查有没有 Kontakt，`add_track_fx` 挂到轨 1，然后告诉用户："Kontakt 已挂在轨 1，请你手动选 Alicia's Keys / Noire / 你想用的音色。"
 
 ## Anti-patterns
 
