@@ -46,7 +46,7 @@ description: 当用户要"搭骨架/定曲式/排段落/加 marker/写 arrangeme
 - 页 E(bar 33–40) `LOOP_E_STRIP` — 只留 Rhodes+bass,能量 0.5
 - 页 F(bar 41–48) `OUTRO` — 只剩 Rhodes+vinyl,4 小节线性淡出至 -60 dB,能量 0.2
 
-**Sidechain** — 用 kick 触发 Rhodes bus 的压缩器,让 kick 一响 Rhodes 就短暂让路,制造"泵"感。用 `add_track_fx` 加 ReaComp 到 Rhodes bus:ratio 4:1,attack 5 ms,release 120 ms,threshold 调到峰值减益 3 dB。
+**Sidechain** — 用 kick 触发 Rhodes bus 的压缩器,让 kick 一响 Rhodes 就短暂让路,制造"泵"感。用 `add_track_fx` 加 ReaComp 到 Rhodes bus:ratio 4:1,attack 5 ms,release 120 ms,threshold 调到使 kick 峰值处压出约 3 dB 减益(**GR = gain reduction,压缩表针读数**;threshold 是你设的门限,GR 是压缩器输出结果 —— 慢慢降 threshold 直到 GR 表读到 -3 dB 就停)。
 
 ## Template 3 — EDM buildup-drop(默认 3:30,128 BPM,4/4)
 **Drop** — buildup 张力累积到顶点后的"爆发段",低音+鼓全员炸进。必须落在整 8 拍强拍(第 1 拍)。**Buildup** 末尾一小节留 1/2 拍全静音(gap),让 drop 更炸。
