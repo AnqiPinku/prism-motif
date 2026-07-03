@@ -575,10 +575,10 @@ export default function App() {
   const [projGroupCollapsed, setProjGroupCollapsed] = useState(() => localStorage.getItem('pm_projGroup') === '1')
   const toggleProjGroup = () => setProjGroupCollapsed((v) => { localStorage.setItem('pm_projGroup', v ? '0' : '1'); return !v })
   // 工作区切换只在实际行动时静默发生：✎ 在项目里新建 / 打开该项目的对话
-  // 切换工作模式（作曲/编曲/混音）:下一回合 runner 会拾起来
+  // 切换工作模式:再点一次已选的胶囊 = 切回默认(""),下一回合 runner 会拾起来
   const switchMode = async (id: string) => {
-    if (id === state?.mode?.current) return
-    await postJSON('/api/mode/switch', { mode: id })
+    const target = id === state?.mode?.current ? '' : id
+    await postJSON('/api/mode/switch', { mode: target })
     loadState()
   }
   const switchWsSilent = async (name: string) => {
