@@ -53,7 +53,7 @@ const I = ({ n, s }: { n: string; s?: number }) => (
 type Chip = { kind: 'chip'; tone: 'ok' | 'err' | 'run'; label: string; detail?: string }
 type ProcessingPhase = 'connecting' | 'thinking' | 'generating' | 'tool' | 'retry'
 type RunTone = 'run' | 'ok' | 'err' | 'info'
-type RunTool = { id: string; name: string; tone: RunTone; durationMs?: number; contentChars?: number }
+type RunTool = { id: string; name: string; tone: RunTone; durationMs?: number; contentChars?: number; detail?: string }
 type RunSummary = { kind: 'run'; durationMs: number; status: 'ok' | 'err'; tools: RunTool[]; reason?: string }
 type RunMeta = {
   provider?: string; model?: string; workspace?: string; step?: number; maxSteps?: number;
@@ -101,7 +101,7 @@ function buildMetrics(name?: string, content?: string): { title: string; tiles: 
   }
   return null
 }
-type Msg = { role: 'user' | 'assistant'; text: string; items: Item[] }
+type Msg = { role: 'user' | 'assistant'; text: string; items: Item[]; streaming?: boolean }
 
 export default function App() {
   const [state, setState] = useState<State | null>(null)
@@ -262,11 +262,13 @@ export default function App() {
     return { ...prev, tools }
   })
 
+  const turnStartRef = useRef<number>(0)   // 回合真正的开始时刻（send 那一瞬），finishRun 用它算 duration
   const finishRun = (status: 'ok' | 'err' = 'ok', reason?: string) => {
     const current = runRef.current
     if (!isActiveRun(current)) return
     const end = Date.now()
-    const start = current.status === 'running' ? current.startedAt : current.requestedAt
+    const start = turnStartRef.current
+      || (current.status === 'running' ? current.startedAt : current.requestedAt)
     const summary: RunSummary = {
       kind: 'run',
       durationMs: Math.max(0, end - start),
@@ -279,6 +281,7 @@ export default function App() {
       ? { status: 'done', startedAt: start, endedAt: end, tools: current.tools, reason }
       : { status: 'error', startedAt: start, endedAt: end, tools: current.tools, reason })
     setSending(false)
+    turnStartRef.current = 0                    // 清起点，别污染下一轮
     patchLast((m) => ({
       ...m,
       items: [summary, ...m.items.filter((it) => it.kind !== 'run')],
@@ -329,14 +332,19 @@ export default function App() {
     else if (e.type === 'tool_batch') {
       acceptRun('tool', `模型请求 ${e.count || 0} 个工具`, { step: e.step })
     }
+    else if (e.type === 'content_start') {                             // 三段式：开头
+      patchLast((m) => ({ ...m, streaming: true }))
+    }
     else if (e.type === 'delta') {
       acceptRun('generating', '正在生成回复')
-      patchLast((m) => ({ ...m, text: m.text + (e.text || '') }))
+      patchLast((m) => ({ ...m, streaming: true, text: m.text + (e.text || '') }))
+    }
+    else if (e.type === 'content_end' || e.type === 'message_complete') { // 三段式：收尾 → 切 Markdown
+      patchLast((m) => ({ ...m, streaming: false }))
     }
     else if (e.type === 'tool_call') {
       acceptRun('tool', `正在执行 ${e.name}`)
       upsertRunTool({ id: e.id || e.name, name: e.name, tone: 'run' })
-      patchLast((m) => ({ ...m, items: [...m.items, { kind: 'chip', tone: 'run', label: e.name }] }))
     }
     else if (e.type === 'tool_start') {
       acceptRun('tool', `正在执行 ${e.name}`)
@@ -351,22 +359,12 @@ export default function App() {
           tone: e.is_error ? 'err' : 'ok',
           durationMs: e.duration_ms,
           contentChars: e.content_chars,
+          detail: (e.content || '').trim(),                   // 详情随 RunSummary 一起归纳
         })
       }
-      patchLast((m) => {
-        const items = [...m.items]
-        for (let i = items.length - 1; i >= 0; i--) {
-          const it = items[i]
-          if (it.kind === 'chip' && it.tone === 'run') {
-            items[i] = { ...it, tone: e.is_error ? 'err' : 'ok', detail: (e.content || '').trim() }
-            break
-          }
-        }
-        // 结构化的音频分析结果额外升级成指标卡（原始 JSON 仍收在工具栏里）
-        const metrics = e.is_error ? null : buildMetrics(e.name, e.content)
-        if (metrics) items.push({ kind: 'metrics', ...metrics })
-        return { ...m, items }
-      })
+      // 结构化的音频分析结果升级成指标卡（RunSummary 展开也能看原始 JSON）
+      const metrics = e.is_error ? null : buildMetrics(e.name, e.content)
+      if (metrics) patchLast((m) => ({ ...m, items: [...m.items, { kind: 'metrics', ...metrics }] }))
     }
     else if (e.type === 'permission_request') {
       acceptRun('tool', `等待确认 ${e.name}`)
@@ -413,6 +411,7 @@ export default function App() {
     setMsgs((m) => [...m, { role: 'user', text: goal, items: [] }, { role: 'assistant', text: '', items: [] }])
     setSending(true)
     const requestedAt = Date.now()
+    turnStartRef.current = requestedAt          // 回合起点（finishRun 用它算完整耗时）
     setProcessingNow(requestedAt)
     setRunState({
       status: 'connecting',
@@ -458,33 +457,48 @@ export default function App() {
     // 静默切到该对话所属项目（记忆按工作区隔离，续聊要用对的域）
     const t = (state?.threads || []).find((x) => x.id === id)
     if (t) switchWsSilent(t.workspace && wsNames.includes(t.workspace) ? t.workspace : 'default')
-    // 从存档重建：同一回合的 assistant/tool 消息合并成一个气泡，工具链恢复成 chips + 指标卡
+    // 从存档重建：同一回合的 assistant/tool 消息合并成一个气泡，
+    // 一整轮的工具聚成一个 RunSummary（跟新流实时体验一致），
+    // 存档里没记时长/is_error → 用文本特征近似
     const out: Msg[] = []
-    const byCallId = new Map<string, Chip>()
     let cur: Msg | null = null
+    const byCallId = new Map<string, RunTool>()
+    let curTools: RunTool[] = []
+    const flushRun = (m: Msg | null) => {
+      if (!m || curTools.length === 0) return
+      const failed = curTools.some((t) => t.tone === 'err')
+      const runItem: RunSummary = { kind: 'run', durationMs: 0, status: failed ? 'err' : 'ok', tools: curTools }
+      m.items.unshift(runItem)
+      curTools = []
+      byCallId.clear()
+    }
     for (const m of data.messages || []) {
       if (m.role === 'user') {
+        flushRun(cur)
         out.push({ role: 'user', text: m.content || '', items: [] })
         cur = null
       } else if (m.role === 'assistant' && (m.content || m.tool_calls?.length)) {
         if (!cur) { cur = { role: 'assistant', text: '', items: [] }; out.push(cur) }
         for (const tc of m.tool_calls || []) {
-          const chip: Chip = { kind: 'chip', tone: 'ok', label: tc.name }
-          if (tc.id) byCallId.set(tc.id, chip)
-          cur.items.push(chip)
+          const id = tc.id || tc.name
+          const tool: RunTool = { id, name: tc.name, tone: 'ok' }
+          byCallId.set(id, tool)
+          curTools.push(tool)
         }
         if (m.content) cur.text = m.content            // 回合内最后一条带文本的 = 最终回复
       } else if (m.role === 'tool' && cur) {
-        const chip = m.tool_call_id ? byCallId.get(m.tool_call_id) : undefined
-        if (!chip) continue
+        const tool = m.tool_call_id ? byCallId.get(m.tool_call_id) : undefined
+        if (!tool) continue
         const content = (m.content || '').trim()
-        chip.detail = content
+        tool.detail = content
+        tool.contentChars = content.length
         // 存档没记 is_error，按常见错误开头近似判断
-        if (/^(analysis error|error|traceback|用户拒绝)/i.test(content)) chip.tone = 'err'
-        const metrics = chip.tone === 'ok' ? buildMetrics(chip.label, content) : null
+        if (/^(analysis error|error|traceback|用户拒绝)/i.test(content)) tool.tone = 'err'
+        const metrics = tool.tone === 'ok' ? buildMetrics(tool.name, content) : null
         if (metrics) cur.items.push({ kind: 'metrics', ...metrics })
       }
     }
+    flushRun(cur)
     setMsgs(out)
   }
 
@@ -987,11 +1001,13 @@ export default function App() {
                           />
                         )}
                         {chips.length > 0 && <ToolBar chips={chips} />}
-                        {m.text && (
+                        {m.text && (m.streaming ? (
+                          <div className="atext streaming">{m.text}<span className="cursor" /></div>
+                        ) : (
                           <div className="atext md">
                             <ReactMarkdown remarkPlugins={[remarkGfm]}>{m.text}</ReactMarkdown>
                           </div>
-                        )}
+                        ))}
                         {others.map((it, j) => <Rendered key={j} it={it} onDecide={decide} />)}
                       </div>
                     </div>
@@ -1238,7 +1254,7 @@ function RunSummaryLine({ run }: { run: RunSummary }) {
     <details className={`run-summary ${run.status}`}>
       <summary>
         <I n={ok ? 'check_circle' : 'error'} s={16} />
-        <span>{ok ? '已处理' : '处理失败'} {elapsedLabel(run.durationMs)}</span>
+        <span>{ok ? '已完成' : '处理失败'}{run.durationMs > 0 ? ' · ' + elapsedLabel(run.durationMs) : ''}</span>
         {toolCount > 0 && (
           <span className="run-summary-note">
             已运行 {toolCount} 个工具{failedTools ? ` · ${failedTools} 个失败` : ''}
@@ -1250,18 +1266,37 @@ function RunSummaryLine({ run }: { run: RunSummary }) {
         <div className="run-summary-body">
           {run.reason && <div className="run-summary-reason">{run.reason}</div>}
           {run.tools.map((tool) => (
-            <div className={`run-row ${tool.tone}`} key={tool.id}>
-              <span className="run-dot"><I n={runToneIcon(tool.tone)} s={15} /></span>
-              <span className="run-row-main">
-                <span className="run-row-label">{tool.name}</span>
-                {(tool.durationMs != null || tool.contentChars != null) && (
-                  <span className="run-row-detail">
-                    {tool.durationMs != null ? msLabel(tool.durationMs) : ''}
-                    {tool.contentChars != null ? `${tool.durationMs != null ? ' · ' : ''}${tool.contentChars} 字符` : ''}
+            tool.detail ? (
+              <details className={`run-row hasdetail ${tool.tone}`} key={tool.id}>
+                <summary>
+                  <span className="run-dot"><I n={runToneIcon(tool.tone)} s={15} /></span>
+                  <span className="run-row-main">
+                    <span className="run-row-label">{tool.name}</span>
+                    {(tool.durationMs != null || tool.contentChars != null) && (
+                      <span className="run-row-detail">
+                        {tool.durationMs != null ? msLabel(tool.durationMs) : ''}
+                        {tool.contentChars != null ? `${tool.durationMs != null ? ' · ' : ''}${tool.contentChars} 字符` : ''}
+                      </span>
+                    )}
                   </span>
-                )}
-              </span>
-            </div>
+                  <I n="expand_more" s={15} />
+                </summary>
+                <pre className="tooldetail">{tool.detail.length > 700 ? tool.detail.slice(0, 700) + ' …' : tool.detail}</pre>
+              </details>
+            ) : (
+              <div className={`run-row ${tool.tone}`} key={tool.id}>
+                <span className="run-dot"><I n={runToneIcon(tool.tone)} s={15} /></span>
+                <span className="run-row-main">
+                  <span className="run-row-label">{tool.name}</span>
+                  {(tool.durationMs != null || tool.contentChars != null) && (
+                    <span className="run-row-detail">
+                      {tool.durationMs != null ? msLabel(tool.durationMs) : ''}
+                      {tool.contentChars != null ? `${tool.durationMs != null ? ' · ' : ''}${tool.contentChars} 字符` : ''}
+                    </span>
+                  )}
+                </span>
+              </div>
+            )
           ))}
         </div>
       )}

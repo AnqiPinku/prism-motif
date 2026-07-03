@@ -10,6 +10,19 @@ from ..reasoner import Reasoner
 from ..contracts import ToolCall, Decision
 
 
+class RetriableStreamError(Exception):
+    """流内瞬时错误（provider 中途 500/429 等），且当次 attempt 尚未产生 delta / tool_call
+    → 上层可安全地整轮重跑 decide()，不会造成重复吐字或重复调用工具。"""
+    def __init__(self, why):
+        super().__init__(why)
+        self.why = why
+
+
+# 可重试的流内错误类型（OpenAI 兼容 provider 常见值）
+_STREAM_RETRIABLE_TYPES = {"server_error", "api_error", "overloaded_error", "rate_limit_error"}
+_STREAM_RETRIABLE_CODES = {"500", "502", "503", "504", "429"}
+
+
 class OpenAICompatReasoner(Reasoner):
     """OpenAI 兼容协议的 Reasoner 实现。"""
 
@@ -95,6 +108,17 @@ class OpenAICompatReasoner(Reasoner):
                     obj = json.loads(data)
                 except json.JSONDecodeError:
                     continue
+                # 流内错误 chunk（provider 中途报错）：若还没吐 delta/工具，抛可重试异常
+                # → 上层 loop 可安全整轮重跑（幂等，不会重复吐字/调工具）；否则致命抛出
+                err = obj.get("error")
+                if isinstance(err, dict):
+                    et = str(err.get("type") or "")
+                    ec = str(err.get("code") or err.get("status") or "")
+                    msg = str(err.get("message") or "provider stream error")
+                    if (not text_acc and not tool_acc
+                            and (et in _STREAM_RETRIABLE_TYPES or ec in _STREAM_RETRIABLE_CODES)):
+                        raise RetriableStreamError("mid-stream %s: %s" % (et or ec or "error", msg))
+                    raise RuntimeError("LLM 流内错误: %s" % msg)
                 self._capture_usage(obj.get("usage"))   # usage chunk 通常 choices 为空
                 choices = obj.get("choices") or []
                 if not choices:
@@ -163,10 +187,11 @@ class OpenAICompatReasoner(Reasoner):
                 if attempt == self.max_attempts:
                     raise RuntimeError("连接 LLM 失败: %s" % (getattr(e, "reason", e),)) from None
                 why = str(getattr(e, "reason", e))
-            if self.on_retry:
-                self.on_retry(attempt, self.max_attempts, why)
             delay = self.retry_base_delay * (2 ** (attempt - 1))
-            time.sleep(delay + random.uniform(0, delay * 0.25))   # 退避 + 抖动
+            jittered = delay + random.uniform(0, delay * 0.25)
+            if self.on_retry:                                     # 上报"重试中…"含 delay，前端可显示倒计时
+                self.on_retry(attempt, self.max_attempts, why, int(jittered * 1000))
+            time.sleep(jittered)   # 退避 + 抖动
         raise RuntimeError("LLM 重试耗尽")
 
     def _post(self, path, payload):

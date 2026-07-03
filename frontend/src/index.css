@@ -208,6 +208,13 @@ body.nav-resizing{cursor:col-resize;user-select:none}
 .run-row.ok .run-dot .material-symbols-outlined{color:var(--green)}
 .run-row.err .run-dot .material-symbols-outlined{color:var(--red)}
 .run-row.info .run-dot .material-symbols-outlined{color:var(--muted)}
+/* run 行可展开工具输出（旧 ToolBar chip 的能力被吸并进来） */
+details.run-row{padding:0}
+details.run-row>summary{list-style:none;display:flex;align-items:center;gap:8px;min-height:30px;padding:4px 6px;border-radius:10px;cursor:pointer;user-select:none}
+details.run-row>summary::-webkit-details-marker{display:none}
+details.run-row>summary>.material-symbols-outlined:last-child{margin-left:auto;color:var(--muted);transition:transform .15s}
+details.run-row[open]>summary>.material-symbols-outlined:last-child{transform:rotate(180deg)}
+details.run-row>.tooldetail{margin:2px 6px 6px}
 .run-row-main{min-width:0;display:flex;align-items:center;gap:8px;flex:1}
 .run-row-label{font-size:12.5px;color:var(--on-surface);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .run-row-detail{font-size:11.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -227,6 +234,10 @@ body.nav-resizing{cursor:col-resize;user-select:none}
 @keyframes run-bar{0%,100%{height:7px;opacity:.55}50%{height:15px;opacity:1}}
 /* markdown 渲染态（不再保留源码换行，由块级元素排版） */
 .atext.md{white-space:normal}
+/* 流式期间用纯文本渲染避开 ReactMarkdown 逐帧重解析（长回答再也不卡） */
+.atext.streaming{white-space:pre-wrap;word-break:break-word}
+.atext.streaming .cursor{display:inline-block;width:2px;height:1em;margin-left:2px;background:var(--primary);vertical-align:text-bottom;animation:blink 1s steps(1) infinite}
+@keyframes blink{50%{opacity:0}}
 .md>:first-child{margin-top:0}
 .md>:last-child{margin-bottom:0}
 .md p{margin:8px 0}

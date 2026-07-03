@@ -222,8 +222,9 @@ def run_turn(goal, provider=None, on_event=None, thread_id=None, permission=None
         ctx = settings.get("context") or {}
         raw_reasoner = reasoner            # 摘要压实用原始模型（不经透镜，避免递归/重复上报）
         try:                               # 模型瞬时错误重试时流式上报，让前端可见
-            raw_reasoner.on_retry = lambda a, m, why: _notify(
+            raw_reasoner.on_retry = lambda a, m, why, delay_ms=0: _notify(
                 {"type": "retry", "attempt": a, "max": m,
+                 "retry_delay_ms": delay_ms, "kind": "connect",
                  "content": "模型调用失败，重试 %d/%d（%s）" % (a, m, why)})
         except Exception:                  # noqa: BLE001
             pass
