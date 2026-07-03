@@ -400,13 +400,17 @@ export default function App() {
     else if (e.type === 'loop_done') {
       updateRunMeta({ step: e.steps })
     }
+    // 三条终止分支都必须清 streaming —— 流式态用 plain-text 绕过 ReactMarkdown(index.css:247
+    // 那条降级),只有 content_end/message_complete 会 patch streaming:false,如果 backend 提前
+    // 走 final/done/error 没发过 content_end,消息就永远卡在 streaming=true,markdown 语法全部裸露
     else if (e.type === 'final')
-      patchLast((m) => (m.text ? m : { ...m, text: e.text || '' }))
+      patchLast((m) => ({ ...m, streaming: false, text: m.text || e.text || '' }))
     else if (e.type === 'done') {
+      patchLast((m) => ({ ...m, streaming: false }))
       finishRun('ok')
     }
     else if (e.type === 'error') {
-      patchLast((m) => ({ ...m, text: '出错：' + (e.message || '') }))
+      patchLast((m) => ({ ...m, streaming: false, text: '出错：' + (e.message || '') }))
       finishRun('err', e.message)
     }
   }
@@ -818,7 +822,11 @@ export default function App() {
   const geminiOk = !!settings?.gemini?.has_key
   const perceptionOn = !!state?.mcp.find((m) => m.name === 'music-perception')?.enabled
   const reaperOk = reaper?.state === 'connected'
-  const allReady = geminiOk && perceptionOn && reaperOk
+  // 默认 provider 是否既存在于 providers.json 又已设 key。缺一项就不算就绪 —— 否则会出现
+  // 胶囊显示"已就绪"、发消息却报"未找到 provider" / "缺 API key" 的自相矛盾状态
+  const defaultProvider = state?.providers.default
+  const llmOk = !!(defaultProvider && settings?.providers?.[defaultProvider]?.has_key)
+  const allReady = llmOk && geminiOk && perceptionOn && reaperOk
   const ready = (ok: boolean) => (ok ? 'var(--green)' : 'var(--amber)')
 
   const composer = (

@@ -86,10 +86,28 @@ def stage_config():
     else:
         shutil.copy2(ROOT / "config" / "mcp_servers.json", dst_cfg / "mcp_servers.json")
 
+    # 其余 config/*.json(providers.json 等)按原样拷 —— 内容不需要净化,拿不到 key 名就没
+    # 意义。用通用循环兜底:未来新加的模板文件默认也进包,不用再改这个函数。黑名单排除已
+    # 由上面处理过的 3 份 + 绝不进包的 secrets.json + 打包临时件。
+    handled = {"settings.json", "modes.json", "mcp_servers.json",
+               "mcp_servers.packaged.json", "secrets.json"}
+    for f in (ROOT / "config").iterdir():
+        if f.is_file() and f.suffix == ".json" and f.name not in handled:
+            shutil.copy2(f, dst_cfg / f.name)
+
     # 绝不带 secrets.json —— 所有 key 都在 Windows keyring
     if (ROOT / "config" / "secrets.json").exists():
         print("⚠ 检测到 config/secrets.json —— 已跳过不打包(所有 API key 在 keyring)",
               file=sys.stderr)
+
+    # 断言:providers.json 必须进 stage;没这份文件 UI 会渲染成空胶囊、发消息也炸。
+    # 让漏配置在 stage 阶段就失败,别拖到装完 MSI 启动才发现。
+    staged_providers = dst_cfg / "providers.json"
+    if not staged_providers.is_file():
+        raise RuntimeError(
+            f"stage 后 {staged_providers} 不存在。源 config/providers.json 缺失?"
+            "  没这份 gateway 三条读路径都会静默回落到空 providers,UI 无胶囊、发消息炸。"
+        )
 
 
 def stage_mcps():
