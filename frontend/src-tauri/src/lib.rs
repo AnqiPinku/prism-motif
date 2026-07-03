@@ -67,7 +67,8 @@ fn bundled_root() -> Option<std::path::PathBuf> {
 
 fn spawn_gateway(port: u16) -> Option<Child> {
     // 优先内置 CPython + 打包版代码;fallback 到 dev 硬编码路径(便于开发时直接跑)
-    let (python, script, prism_home) = if let Some(root) = bundled_root() {
+    let bundled = bundled_root();
+    let (python, script, prism_home) = if let Some(ref root) = bundled {
         let py = root.join("python").join("python.exe");
         let gw = root.join("app").join("gateway").join("server.py");
         // PRISM_HOME 指向 resources/,让 mcp_servers.json 里的 ${PRISM_HOME}/mcps/... 解析成
@@ -84,12 +85,17 @@ fn spawn_gateway(port: u16) -> Option<Child> {
     cmd.arg(&script)
         .env("PRISM_PORT", port.to_string())
         .env("PRISM_HOME", &prism_home)
-        // 打包版 DATA_ROOT 用 per-user %APPDATA%\PrismMotif;paths.py 里 sys.frozen 分支
-        // 不适用(我们没冻 gateway),用显式环境变量指定
-        .env("PRISM_DATA_DIR", data_dir().unwrap_or_else(|| prism_home.clone()))
         .env("PYTHONIOENCODING", "utf-8")
         .env("PYTHONUNBUFFERED", "1")
         .creation_flags(CREATE_NO_WINDOW);
+    // 仅打包版设 PRISM_DATA_DIR:resources/app 是只读的,DATA_ROOT 必须指向 %LOCALAPPDATA%
+    // 才能写 threads/settings/keyring。dev 模式不设 —— 让 paths.py 走 INSTALL_ROOT 分支,
+    // gateway 直接读源码 config/,和打包前行为一致(否则会跑去 APPDATA 找 seed 剩下的旧文件)
+    if bundled.is_some() {
+        if let Some(dd) = data_dir() {
+            cmd.env("PRISM_DATA_DIR", dd);
+        }
+    }
     if let Some(log) = gateway_log() {
         if let Ok(log_err) = log.try_clone() {
             cmd.stdout(Stdio::from(log)).stderr(Stdio::from(log_err));
