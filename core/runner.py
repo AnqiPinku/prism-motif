@@ -238,11 +238,23 @@ def run_turn(goal, provider=None, on_event=None, thread_id=None, permission=None
                 elide_over_chars=ctx.get("elide_over_chars", 2000),
                 on_event=on_event)
 
-        skills = enabled_skills(str(DATA / "skills"))   # 只注入勾选启用的技能
+        # 工作模式（作曲/编曲/混音）：按 mode 过滤 skill + 用 mode 的 base_prompt
+        modes_cfg = _load_json(CONFIG / "modes.json", {})
+        cur_mode = modes_cfg.get("current") or ""
+        mode_def = (modes_cfg.get("modes") or {}).get(cur_mode) or {}
+        allow_skill_modes = set(mode_def.get("skill_modes") or ["general"])
+        skills = [s for s in enabled_skills(str(DATA / "skills"))
+                  if getattr(s, "mode", "general") in allow_skill_modes]
         memory = _build_memory(workspace)
         memories = memory.recall(goal)
-        base = settings.get("base_prompt", DEFAULT_BASE_PROMPT)
+        # 模式的 base_prompt 优先；settings.base_prompt 作为补充叠在后面
+        base_settings = settings.get("base_prompt", DEFAULT_BASE_PROMPT) or ""
+        base_mode = mode_def.get("base_prompt") or ""
+        base = ("\n\n".join([x for x in (base_mode, base_settings) if x])) or DEFAULT_BASE_PROMPT
         system_prompt = build_system_prompt(skills, memories, base=base)
+        _notify({"type": "mode_active", "mode": cur_mode,
+                 "label": mode_def.get("label") or cur_mode,
+                 "skill_count": len(skills)})
 
         prior, prev_summary, thread_ws = [], None, None
         if thread_id:

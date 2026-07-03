@@ -1,6 +1,7 @@
 ---
 name: reaper-producer
 disclosure: full
+mode: general
 tags: [music, reaper, mixing, production]
 description: Use when Codex needs to control, inspect, edit, arrange, mix, render, or troubleshoot a live REAPER DAW project through the configured reaper MCP server. Triggers include natural-language music production requests, REAPER project state inspection, track/MIDI/audio/FX operations, Kontakt/VST instrument loading, mixing changes, loop or arrangement creation, undo/recovery, render/export, and requests to act as a DAW producer assistant.
 ---

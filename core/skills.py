@@ -12,12 +12,14 @@ class Skill:
     tags: list
     body: str
     path: str
+    mode: str = "general"  # "composition" | "arrangement" | "mix" | "general" — 三模块工作流按此过滤
 
 
 def _parse(text, path):
     name = os.path.splitext(os.path.basename(path))[0]
     disclosure = "lazy"
     tags = []
+    mode = "general"
     body = text.strip()
     lines = text.splitlines()
     if lines and lines[0].strip() == "---":
@@ -38,7 +40,9 @@ def _parse(text, path):
             elif k == "tags":
                 v = v.strip().lstrip("[").rstrip("]")
                 tags = [x.strip() for x in v.split(",") if x.strip()]
-    return Skill(name=name, disclosure=disclosure, tags=tags, body=body, path=path)
+            elif k == "mode":
+                mode = v or "general"
+    return Skill(name=name, disclosure=disclosure, tags=tags, body=body, path=path, mode=mode)
 
 
 def load_skills(skills_dir):

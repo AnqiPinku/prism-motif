@@ -42,6 +42,11 @@ input,textarea{font-family:inherit}
 .logo{width:34px;height:34px;border-radius:11px;background:var(--grad);color:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(79,76,214,.22);flex-shrink:0}
 .brand{font-size:20px;font-weight:500;letter-spacing:0;background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent;white-space:nowrap}
 .spacer{flex:1}
+.mode-selector{display:inline-flex;gap:2px;background:var(--surface-1);border-radius:999px;padding:3px;margin-right:8px}
+.mode-chip{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 12px;border:none;background:transparent;border-radius:999px;font-size:13px;color:var(--on-surface-var);cursor:pointer;transition:background .15s,color .15s}
+.mode-chip:hover:not(.active){background:var(--surface-2);color:var(--on-surface)}
+.mode-chip.active{background:var(--mode-accent,var(--primary));color:#fff;font-weight:500}
+.mode-chip .material-symbols-outlined{font-size:16px}
 .statuswrap{position:relative}
 .statuschip{display:inline-flex;align-items:center;gap:8px;height:36px;padding:0 14px;border-radius:18px;border:none;background:var(--surface-1);color:var(--on-surface-var);font-size:13px;transition:background .12s}
 .statuschip:hover{background:var(--surface-2)}

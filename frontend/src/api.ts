@@ -4,6 +4,10 @@ export interface State {
   skills: { name: string; disclosure: string; tags: string[]; enabled: boolean }[]
   threads: { id: string; title?: string; archived?: boolean; workspace?: string; mtime?: number }[]
   workspace: { current: string; names: string[]; archived?: string[] }
+  mode?: {
+    current: string
+    list: { id: string; label: string; icon?: string; accent?: string }[]
+  }
 }
 
 export interface ReaperStatus {

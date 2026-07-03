@@ -575,6 +575,12 @@ export default function App() {
   const [projGroupCollapsed, setProjGroupCollapsed] = useState(() => localStorage.getItem('pm_projGroup') === '1')
   const toggleProjGroup = () => setProjGroupCollapsed((v) => { localStorage.setItem('pm_projGroup', v ? '0' : '1'); return !v })
   // 工作区切换只在实际行动时静默发生：✎ 在项目里新建 / 打开该项目的对话
+  // 切换工作模式（作曲/编曲/混音）:下一回合 runner 会拾起来
+  const switchMode = async (id: string) => {
+    if (id === state?.mode?.current) return
+    await postJSON('/api/mode/switch', { mode: id })
+    loadState()
+  }
   const switchWsSilent = async (name: string) => {
     if (name === state?.workspace.current) return
     await postJSON('/api/workspace/switch', { name })
@@ -885,6 +891,22 @@ export default function App() {
             </div>
           )}
         </div>
+        {state?.mode?.list?.length ? (
+          <div className="mode-selector" role="tablist" aria-label="工作模式">
+            {state.mode.list.map((m) => {
+              const active = m.id === state.mode?.current
+              return (
+                <button key={m.id} role="tab" aria-selected={active}
+                  className={'mode-chip' + (active ? ' active' : '')}
+                  style={active && m.accent ? { '--mode-accent': m.accent } as CSSProperties : undefined}
+                  onClick={() => switchMode(m.id)} title={m.label}>
+                  <I n={m.icon || 'auto_awesome'} s={16} />
+                  <span>{m.label}</span>
+                </button>
+              )
+            })}
+          </div>
+        ) : null}
         <button className="iconbtn" aria-label="设置" onClick={() => setSettingsOpen(true)}><I n="settings" /></button>
         {inTauri && <WinControls />}
       </header>
