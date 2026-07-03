@@ -59,8 +59,13 @@ def bridge_installer():
     global _BRIDGE_INSTALLER
     if _BRIDGE_INSTALLER is None:
         import importlib.util
-        p = os.path.join(str(paths.PRISM_HOME), "reaper-mcp", "installer", "install_bridge.py")
-        if not os.path.isfile(p):
+        # 优先新位置 mcps/reaper-mcp/，回退旧位置（兼容尚未搬家的部署）
+        candidates = [
+            os.path.join(str(paths.PRISM_HOME), "mcps", "reaper-mcp", "installer", "install_bridge.py"),
+            os.path.join(str(paths.PRISM_HOME), "reaper-mcp", "installer", "install_bridge.py"),
+        ]
+        p = next((c for c in candidates if os.path.isfile(c)), None)
+        if not p:
             return None
         spec = importlib.util.spec_from_file_location("reaper_bridge_installer", p)
         mod = importlib.util.module_from_spec(spec)
