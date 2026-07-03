@@ -15,7 +15,9 @@
   },
   "bundle": {
     "active": true,
-    "targets": "all",
+    "targets": [
+      "msi"
+    ],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -23,6 +25,13 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
+    "resources": {
+      "resources/python": "resources/python",
+      "../../build/pkg": "resources/app",
+      "../../../mcps/music-perception-mcp/dist/music_perception": "resources/mcps/music-perception",
+      "../../build/mcps/reaper-mcp": "resources/mcps/reaper-mcp",
+      "../../build/mcps/system-mcp": "resources/mcps/system-mcp"
+    },
     "android": {
       "debugApplicationIdSuffix": ".debug"
     }

@@ -57,14 +57,38 @@ fn urlencoding_encode(s: &str) -> String {
     out
 }
 
+// 定位 bundled resources 目录: exe 同级的 resources/。tauri build 时 bundle.resources
+// 会把 python/、app/(=stage_pkg 输出)、mcps/ 全放这里。dev 模式下不存在,fallback 到 A:/。
+fn bundled_root() -> Option<std::path::PathBuf> {
+    let exe = std::env::current_exe().ok()?;
+    let root = exe.parent()?.join("resources");
+    if root.join("python").join("python.exe").is_file() { Some(root) } else { None }
+}
+
 fn spawn_gateway(port: u16) -> Option<Child> {
-    // DEV: system Python + the repo gateway. Packaging (P5b) will resolve a bundled
-    // interpreter and the app-relative gateway path instead of these dev absolutes.
-    let mut cmd = Command::new("A:/Python310/python.exe");
-    cmd.arg("A:/Prismcode/prism-motif/gateway/server.py")
+    // 优先内置 CPython + 打包版代码;fallback 到 dev 硬编码路径(便于开发时直接跑)
+    let (python, script, prism_home) = if let Some(root) = bundled_root() {
+        let py = root.join("python").join("python.exe");
+        let gw = root.join("app").join("gateway").join("server.py");
+        // PRISM_HOME 指向 resources/,让 mcp_servers.json 里的 ${PRISM_HOME}/mcps/... 解析成
+        // resources/mcps/... —— 也就是 tauri 把 3 个 mcps 放的位置
+        (py, gw, root.clone())
+    } else {
+        (
+            std::path::PathBuf::from("A:/Python310/python.exe"),
+            std::path::PathBuf::from("A:/Prismcode/prism-motif/gateway/server.py"),
+            std::path::PathBuf::from("A:/Prismcode"),
+        )
+    };
+    let mut cmd = Command::new(&python);
+    cmd.arg(&script)
         .env("PRISM_PORT", port.to_string())
-        .env("PYTHONIOENCODING", "utf-8") // 日志重定向到文件后防中文 GBK 编码崩溃
-        .env("PYTHONUNBUFFERED", "1") // 重定向到文件时不缓冲，日志实时可读
+        .env("PRISM_HOME", &prism_home)
+        // 打包版 DATA_ROOT 用 per-user %APPDATA%\PrismMotif;paths.py 里 sys.frozen 分支
+        // 不适用(我们没冻 gateway),用显式环境变量指定
+        .env("PRISM_DATA_DIR", data_dir().unwrap_or_else(|| prism_home.clone()))
+        .env("PYTHONIOENCODING", "utf-8")
+        .env("PYTHONUNBUFFERED", "1")
         .creation_flags(CREATE_NO_WINDOW);
     if let Some(log) = gateway_log() {
         if let Ok(log_err) = log.try_clone() {
