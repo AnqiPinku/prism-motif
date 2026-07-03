@@ -136,14 +136,18 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/reaper/install-bridge":
             return self._json(self._reaper_install(body.get("resource_path")))
         if path == "/api/mode/switch":
-            # 切换三模块工作流:改 config/modes.json 的 current 字段;下一回合 runner 会拾起来
+            # 切换三模块工作流:改 config/modes.json 的 current 字段;下一回合 runner 会拾起来。
+            # mode="" (空串) 是默认模式 —— 不叠加任何 mode 的 base_prompt,只启用 general skill。
             m = str(body.get("mode") or "").strip()
             cfg = load_json(CONFIG / "modes.json", {})
-            if m not in (cfg.get("modes") or {}):
+            if m and m not in (cfg.get("modes") or {}):
                 return self._json({"error": "unknown mode: " + m}, 400)
             cfg["current"] = m
             (CONFIG / "modes.json").write_text(
                 json.dumps(cfg, ensure_ascii=False, indent=2), encoding="utf-8")
+            # 自动切换 skill enable 状态:mode-specific skill 按目标 mode 开关,
+            # general skill 保留用户手动选择(避免覆盖 reaper-producer 之类的常驻人设)
+            self._sync_skills_to_mode(m, cfg)
             return self._json({"ok": True, "current": m})
         if path == "/api/open":
             # 系统浏览器打开一个 URL（onboarding 里的下载链接等）。
@@ -434,6 +438,18 @@ class Handler(BaseHTTPRequestHandler):
             return ib.status()
         except Exception as e:  # noqa: BLE001
             return {"error": str(e)}
+
+    def _sync_skills_to_mode(self, mode_id, cfg):
+        """切模式时同步 skill enable 状态:mode-specific 的按目标 mode 自动开关,
+        general 的保持用户手动选择(避免覆盖常驻人设)。"""
+        mode_def = (cfg.get("modes") or {}).get(mode_id, {}) if mode_id else {}
+        allowed = set(mode_def.get("skill_modes") or [])
+        skills_dir = str(DATA / "skills")
+        for s in load_skills(skills_dir):
+            sk_mode = getattr(s, "mode", "general")
+            if sk_mode == "general":
+                continue                       # general 尊重用户手动选择
+            set_enabled(skills_dir, s.name, sk_mode in allowed)
 
     def _reaper_install(self, resource_path):
         ib = bridge_installer()
