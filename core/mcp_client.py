@@ -1,6 +1,7 @@
 """手写 MCP stdio 客户端：启动一个 MCP server 子进程，做握手并调用其工具。
 与我们写的 reaper-mcp 服务端对称，只用标准库 subprocess + json。"""
 import os
+import sys
 import json
 import time
 import queue
@@ -45,6 +46,9 @@ class MCPClient:
                 pass
             full_env.setdefault("NUMBA_CACHE_DIR", cache)
         command = paths.expand(self.command)          # 展开 ${PRISM_HOME} 令牌 → 绝对路径
+        # command="python" → 用 gateway 自己的解释器 (打包版是 bundled CPython, dev 版是系统 python)
+        if command in ("python", "python.exe"):
+            command = sys.executable
         args = [paths.expand(a) for a in self.args]
         for a in args:   # 缺脚本会因 stderr=DEVNULL 静默失败 → 提前报清楚（安装不完整/兄弟仓缺失）
             if a.endswith(".py") and not os.path.isfile(a):

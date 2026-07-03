@@ -13,3 +13,6 @@ __pycache__/
 /web/vite.svg
 /numba-cache/
 data/skills/_enabled.json
+# P5b 打包中间产物
+/build/
+/frontend/src-tauri/resources/python/
