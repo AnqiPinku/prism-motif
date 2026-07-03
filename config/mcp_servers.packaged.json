@@ -15,7 +15,7 @@
       "command": "${PRISM_HOME}/mcps/music-perception/music_perception.exe",
       "args": [],
       "env": {
-        "GEMINI_BASE_URL": "https://www.packyapi.com/v1",
+        "GEMINI_BASE_URL": "https://generativelanguage.googleapis.com/v1beta/openai/",
         "GEMINI_MODEL": "gemini-2.5-flash"
       }
     },
