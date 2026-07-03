@@ -372,6 +372,14 @@ export default function App() {
       acceptRun('tool', `等待确认 ${e.name}`)
       patchLast((m) => ({ ...m, items: [...m.items, { kind: 'perm', id: e.id, label: e.name }] }))
     }
+    else if (e.type === 'permission_result') {          // 服务端最终结局 → 卡片锁死状态
+      const label = { allow: '已允许', deny: '已拒绝', timeout: '已超时', disconnected: '已中断' }[e.outcome] || e.outcome
+      patchLast((m) => ({
+        ...m,
+        items: m.items.map((it) =>
+          it.kind === 'perm' && it.id === e.id && !it.decided ? { ...it, decided: label } : it),
+      }))
+    }
     else if (e.type === 'context') {
       const contextMeta = {
         promptPct: e.pct,
