@@ -10,7 +10,15 @@ Runs 100% on your machine (no cloud lock-in): a text LLM is the brain, determini
 
 The main window is a three-mode workspace — Composition / Arrangement / Mix — with a project-style sidebar, an M3-styled title bar, and a chat panel where you talk to a persona shaped by the current mode.
 
-*(Screenshots go here once we have a public build.)*
+![Prism Motif — home screen](docs/home.png)
+
+Ask in plain language; the agent inspects your project, writes into REAPER, and explains the reasoning as it goes. Here it drops an 8-bar lo-fi chord loop and lays out the harmonic logic — vi–IV–I–V, matched to the project's 63 BPM:
+
+![A composition session — the agent writes a chord progression and explains why](docs/session-chords.png)
+
+The end state of a full production is an editable, multi-track REAPER project you own — every part is real MIDI and audio you can keep tweaking, never a black-box render:
+
+![A multi-track arrangement in REAPER](docs/arrangement-daw.png)
 
 ---
 
