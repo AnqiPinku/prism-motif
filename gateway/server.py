@@ -135,6 +135,16 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(self._settings_save(body))
         if path == "/api/reaper/install-bridge":
             return self._json(self._reaper_install(body.get("resource_path")))
+        if path == "/api/mode/switch":
+            # 切换三模块工作流:改 config/modes.json 的 current 字段;下一回合 runner 会拾起来
+            m = str(body.get("mode") or "").strip()
+            cfg = load_json(CONFIG / "modes.json", {})
+            if m not in (cfg.get("modes") or {}):
+                return self._json({"error": "unknown mode: " + m}, 400)
+            cfg["current"] = m
+            (CONFIG / "modes.json").write_text(
+                json.dumps(cfg, ensure_ascii=False, indent=2), encoding="utf-8")
+            return self._json({"ok": True, "current": m})
         if path == "/api/open":
             # 系统浏览器打开一个 URL（onboarding 里的下载链接等）。
             # 只允许 hostname 白名单 —— 防被越狱的 agent / 注入的页面拿去打开任意 URL。
@@ -264,9 +274,12 @@ class Handler(BaseHTTPRequestHandler):
         mcp = load_json(CONFIG / "mcp_servers.json", {"servers": []})
         en = load_enabled_map(str(DATA / "skills"))
         skills = [{"name": s.name, "disclosure": s.disclosure, "tags": s.tags,
+                   "mode": getattr(s, "mode", "general"),
                    "enabled": en.get(s.name, True)}
                   for s in load_skills(str(DATA / "skills"))]
         fb = (load_json(CONFIG / "settings.json", {}).get("context") or {}).get("window_tokens", 128000)
+        # 三模块工作流：给前端 current + labels/icons/accents，供 mode selector 渲染
+        modes = load_json(CONFIG / "modes.json", {})
         return {
             "providers": {"default": prov.get("default"),
                           "names": list(prov.get("providers", {}).keys()),
@@ -279,6 +292,12 @@ class Handler(BaseHTTPRequestHandler):
             "workspace": {"current": runner.current_workspace(),
                           "names": runner.list_workspaces(),
                           "archived": runner.archived_workspaces()},
+            "mode": {
+                "current": modes.get("current") or "",
+                "list": [{"id": k, "label": v.get("label") or k,
+                          "icon": v.get("icon"), "accent": v.get("accent")}
+                         for k, v in (modes.get("modes") or {}).items()],
+            },
         }
 
     def _toggle_mcp(self, name, enabled):
