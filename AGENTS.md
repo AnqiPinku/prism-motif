@@ -99,7 +99,7 @@ class MCPClient:
 - 传输：每条 JSON-RPC 消息一行（newline-delimited），写 `proc.stdin`、读 `proc.stdout`。
 - 握手：发 `initialize`(protocolVersion/clientInfo) → 收结果 → 发 `notifications/initialized`。
 - `call_tool` 返回的 MCP content（文本块）拼成 `ToolResult.content`；MCP 报错 → `is_error=True`。
-- **验收**：能连上 `A:/Prismcode/mcps/reaper-mcp/server/reaper_mcp_server.py`，`list_tools()` 拿到 ~20 个工具，`call_tool("reaper_status",{})` 有返回。
+- **验收**：能连上 `${PRISM_HOME}/mcps/reaper-mcp/server/reaper_mcp_server.py`，`list_tools()` 拿到 ~20 个工具，`call_tool("reaper_status",{})` 有返回。
 
 ### 2.4 `core/tools.py`（T4，依赖 T3）
 ```python
@@ -203,7 +203,7 @@ tags: [人设, 音乐]
 `config/mcp_servers.json`
 ```json
 { "servers": [
-  {"name":"reaper","enabled":true,"command":"python","args":["A:/Prismcode/mcps/reaper-mcp/server/reaper_mcp_server.py"]}
+  {"name":"reaper","enabled":true,"command":"python","args":["${PRISM_HOME}/mcps/reaper-mcp/server/reaper_mcp_server.py"]}
 ] }
 ```
 `config/memory.json` → `{"backend":"json","options":{"dir":"data/memory"}}`

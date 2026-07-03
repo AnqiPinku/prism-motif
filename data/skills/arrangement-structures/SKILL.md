@@ -97,7 +97,8 @@ description: 当用户要"搭骨架/定曲式/排段落/加 marker/写 arrangeme
 1. 认风格 → 选模板 → 用 `add_marker` 按上表 `Marker name` 全部打上(一次 8–10 次调用)。
 2. 用 `set_time_selection` 选中第一个 chorus 的起止拍,`render_to_wav` 渲染 → 让用户先听 hook 是否成立。hook 不行,后面全不行。
 3. 骨架确认后再谈音色、混音、变奏。骨架错的话音色调再好都平。
-4. Kontakt 需要具体音色时明说:"Kontakt 音色库要你手动在 Kontakt UI 里选(NI 不开放脚本加载),你选完后我这边继续。"
+4. Kontakt 需要具体音色时明说:"**Kontakt / Omnisphere 等重采样器的具体音色库必须在插件窗口内由用户手动加载**——NI 设计如此,MCP 只能 add_track_fx 挂上宿主,选不了具体 patch。
+"
 
 ## Anti-patterns
 - **每段都 8 小节均匀切**——听众会睡着;pre-chorus 4 小节、bridge 变长或变短制造不对称才有推进感。

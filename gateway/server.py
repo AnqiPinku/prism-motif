@@ -664,14 +664,29 @@ class Handler(BaseHTTPRequestHandler):
                 RUNNING.pop(tid, None)
 
 
+def _write_startup_error(msg):
+    """Tauri 壳会在 wait_port 超时后读这个文件展示给用户,避免 45s 静默空窗。"""
+    try:
+        base = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
+        d = os.path.join(base, "PrismMotif", "logs")
+        os.makedirs(d, exist_ok=True)
+        with open(os.path.join(d, "startup_error.txt"), "w", encoding="utf-8") as f:
+            f.write(msg)
+    except OSError:
+        pass
+
+
 def main():
     port = int(os.environ.get("PRISM_PORT", "8770"))
     try:
         httpd = ThreadingHTTPServer(("127.0.0.1", port), Handler)
     except OSError as e:
-        print("启动失败：端口 %d 被占用（可能已有一个 Prism Core 在运行）。" % port)
-        print("换个端口再启动：先 set PRISM_PORT=8771，再 python gateway/server.py")
-        print("（原始错误：%s）" % e)
+        msg = ("启动失败：端口 %d 被占用。\n"
+               "可能已经有一个 Prism Motif 在跑了(检查任务栏),或者其它软件占用了这个端口。\n\n"
+               "换个端口再启动:先 set PRISM_PORT=8771,再启动 app。\n\n"
+               "原始错误:%s" % (port, e))
+        print(msg)
+        _write_startup_error(msg)
         return
     print("Prism Core 前端已启动：http://127.0.0.1:%d  (Ctrl+C 退出)" % port)
     try:
