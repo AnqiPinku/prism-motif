@@ -1121,7 +1121,8 @@ export default function App() {
       {settingsOpen && state && (
         <Settings state={state} trust={bypass} setTrust={setBypass}
           onClose={() => setSettingsOpen(false)}
-          onSaved={() => { loadState(); loadSettings() }} />
+          onSaved={() => { loadState(); loadSettings() }}
+          onOpenOnboarding={() => { setSettingsOpen(false); setOnboarding(true) }} />
       )}
       {onboarding && (
         <Onboarding reaper={reaper} onReaperRefresh={loadReaper}

@@ -385,6 +385,9 @@ details.toolrow:hover .chip{background:var(--surface-2)}
 .inline{display:flex;gap:8px;margin-top:10px}
 .inline input{flex:1;height:42px;border:1px solid var(--outline);border-radius:12px;padding:0 12px;font-size:14px}
 .inline input:focus{outline:none;border-color:var(--primary)}
+.extlink{color:var(--primary);cursor:pointer;margin-left:6px;display:inline-flex;align-items:center;gap:3px;font-weight:500}
+.extlink:hover{text-decoration:underline}
+.extlink .material-symbols-outlined{opacity:.75}
 .wfoot{display:flex;align-items:center;gap:14px;margin-top:24px}
 .wfoot .start{flex:1;height:50px;border-radius:25px;border:none;background:var(--grad);color:#fff;font-size:15px;font-weight:500}
 .wfoot .later{color:var(--muted);font-size:14px;background:none;border:none}

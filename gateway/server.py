@@ -130,6 +130,21 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(self._settings_save(body))
         if path == "/api/reaper/install-bridge":
             return self._json(self._reaper_install(body.get("resource_path")))
+        if path == "/api/open":
+            # 系统浏览器打开一个 URL（onboarding 里的下载链接等）。
+            # 只允许 hostname 白名单 —— 防被越狱的 agent / 注入的页面拿去打开任意 URL。
+            import webbrowser
+            import urllib.parse as _urp
+            u = str(body.get("url") or "")
+            try:
+                pr = _urp.urlparse(u)
+            except ValueError:
+                return self._json({"error": "invalid url"}, 400)
+            hosts = {"www.reaper.fm", "reaper.fm"}
+            if pr.scheme != "https" or pr.hostname not in hosts:
+                return self._json({"error": "url not allowed"}, 400)
+            webbrowser.open(u)
+            return self._json({"ok": True})
         if path == "/api/threads/delete":
             threads_mod.delete_thread(str(DATA / "threads"), body.get("id", ""))
             return self._json({"ok": True})
