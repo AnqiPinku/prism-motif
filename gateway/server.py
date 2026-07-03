@@ -581,14 +581,25 @@ class Handler(BaseHTTPRequestHandler):
                       "name": call.name, "arguments": call.arguments})
             except TurnCancelled:
                 PENDING.pop(pid, None); raise
-            # 分片等：每秒查一次断线/取消，别死等 300 秒
-            for _ in range(300):
+            outcome = "timeout"                   # 300s 都没点 → 认作 timeout
+            for _ in range(300):                  # 每秒查一次断线/取消，别死等
                 if ev.wait(1):
+                    entry = PENDING.pop(pid, {})
+                    outcome = "allow" if entry.get("result", False) else "deny"
                     break
                 if closed or cancel.is_set():
                     PENDING.pop(pid, None)
-                    return False
-            return PENDING.pop(pid, {}).get("result", False)
+                    outcome = "disconnected"
+                    break
+            else:
+                PENDING.pop(pid, None)
+            # 发个 permission_result 让前端锁死卡片状态（超时/断线后不再让用户点击）
+            try:
+                emit({"type": "permission_result", "id": pid, "outcome": outcome},
+                     record=False)
+            except TurnCancelled:
+                pass
+            return outcome == "allow"
 
         emit({"type": "thread", "id": tid})
         cancelled_by_client = False
