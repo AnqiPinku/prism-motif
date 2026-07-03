@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { getJSON, postJSON, type ReaperStatus } from './api'
+import { getJSON, postJSON, openExternal, type ReaperStatus } from './api'
 import { type SettingsData } from './Settings'
 
 const Icon = ({ n, s }: { n: string; s?: number }) => (
@@ -85,10 +85,18 @@ export default function Onboarding({ reaper, onReaperRefresh, onDone }:
             <div className="stitle">REAPER{reaperDone && <span style={{ marginLeft: 'auto', fontSize: 13, color: 'var(--green)' }}>已连接</span>}</div>
             <p className="sdesc">连接你的 DAW。点一下装好桥，之后打开 REAPER 会自动连上，不用碰 Actions 菜单。</p>
             {!reaperDone && (
-              <div className="inline" style={{ alignItems: 'center' }}>
-                <span className="sdesc" style={{ flex: 1, margin: 0 }}>{reaperLabel(reaper)}</span>
-                <button className="btn" onClick={installBridge} disabled={busy === 'reaper'}>一键装桥</button>
-              </div>
+              <>
+                <div className="inline" style={{ alignItems: 'center' }}>
+                  <span className="sdesc" style={{ flex: 1, margin: 0 }}>{reaperLabel(reaper)}</span>
+                  <button className="btn" onClick={installBridge} disabled={busy === 'reaper'}>一键装桥</button>
+                </div>
+                <p className="sdesc" style={{ marginTop: 8 }}>
+                  还没装 REAPER？
+                  <a className="extlink" onClick={() => openExternal('https://www.reaper.fm/download.php')}>
+                    在官网免费下载 <Icon n="open_in_new" s={13} />
+                  </a>
+                </p>
+              </>
             )}
           </div>
         </div>

@@ -127,6 +127,11 @@ export async function streamChat(
 export const respondPermission = (id: string, allow: boolean) =>
   postJSON('/api/permission', { id, allow })
 
+// 在系统默认浏览器打开一个外部链接（Tauri 壳里 <a target="_blank"> 不生效）。
+// 交给 gateway 处理：Python webbrowser.open + hostname 白名单。
+export const openExternal = (url: string) =>
+  postJSON('/api/open', { url })
+
 // 聊天附音频：传原始字节给 gateway，拿回本机路径（agent 的分析/转 MIDI 工具吃路径）。
 export async function uploadAudio(file: File): Promise<{ path?: string; error?: string }> {
   const r = await fetch(API + '/api/upload', {

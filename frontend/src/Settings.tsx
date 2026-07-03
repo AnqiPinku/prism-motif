@@ -11,8 +11,9 @@ const Icon = ({ n, s }: { n: string; s?: number }) => (
   <span className="material-symbols-outlined" style={s ? { fontSize: s } : undefined} aria-hidden>{n}</span>
 )
 
-export default function Settings({ state, trust, setTrust, onClose, onSaved }:
-  { state: State; trust: boolean; setTrust: (v: boolean) => void; onClose: () => void; onSaved: () => void }) {
+export default function Settings({ state, trust, setTrust, onClose, onSaved, onOpenOnboarding }:
+  { state: State; trust: boolean; setTrust: (v: boolean) => void;
+    onClose: () => void; onSaved: () => void; onOpenOnboarding?: () => void }) {
   const [data, setData] = useState<SettingsData | null>(null)
   const [def, setDef] = useState('')
   const [pick, setPick] = useState('')
@@ -137,6 +138,11 @@ export default function Settings({ state, trust, setTrust, onClose, onSaved }:
             <div className="togglerow">信任模式
               <span className="tag">跳过危险操作确认</span>
               <button className={'switch' + (trust ? '' : ' off')} aria-label="信任模式" onClick={() => setTrust(!trust)} /></div>
+            {onOpenOnboarding && (
+              <div className="togglerow">重新查看引导
+                <span className="tag">再走一遍 3 步向导</span>
+                <button className="btn small" onClick={onOpenOnboarding}>打开</button></div>
+            )}
           </div>
 
           <div className="btnrow">
