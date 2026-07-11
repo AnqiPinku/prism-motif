@@ -6,11 +6,13 @@ name: MSI Smoke
 
 on:
   workflow_dispatch:
-  # workflow_dispatch 只认默认分支上的工作流文件；在分支上验证时，
-  # 推送本文件即触发一次（日常提交不会碰到这个 path，不会误跑重活）。
+  # workflow_dispatch 只认默认分支上的工作流文件；分支验证靠 push-path 触发。
+  # path 限定为打包链本身——只有动了打包相关文件才值得跑这条重流水线。
   push:
     paths:
       - ".github/workflows/msi-smoke.yml"
+      - "packaging/**"
+      - "tests/msi_install_smoke.ps1"
 
 jobs:
   msi:
