@@ -26,15 +26,15 @@
 
 ## 当前施工顺序
 
-1. 完成 Phase 2 的 20 回合 Soak Test 与稳定性门禁（Fake Provider/MCP 与前端 reducer 已落地）；
-2. 决定 `agent/v0-2-hardening` 合回 `main` 的时机（合并后 `MSI Smoke` 可直接 workflow_dispatch）；
-3. 按 `ROADMAP_V0.2.md` 继续 Phase 3–5。
+1. 决定 `agent/v0-2-hardening` 合回 `main` 的时机（合并后 `MSI Smoke` 可直接 workflow_dispatch）；Phase 2 已完成（CI + MSI Smoke + Soak 全绿）；
+2. 按 `ROADMAP_V0.2.md` 进入 Phase 3（工具语义、音乐知识与 Agent Eval）。
 
 ## 必跑验证
 
 ```powershell
 python test_core.py
 python -m unittest discover -s tests -v
+python tests\soak_test.py
 python tests\check_repo_hygiene.py
 npm --prefix frontend run lint
 npm --prefix frontend run test
