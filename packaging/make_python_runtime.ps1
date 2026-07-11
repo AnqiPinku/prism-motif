@@ -1,12 +1,13 @@
 # 重建 MSI 内置的 CPython 运行时（frontend/src-tauri/resources/python）。
-# 与已验收的 v0.1.1 bundle 保持一致：NuGet python 3.10.14 全量布局 + pip + keyring。
-# 注意：不装 openai —— 核心 reasoner 走 stdlib HTTP，已由 v0.1.1 MSI 真机验收证实。
+# NuGet python 包的 Windows 二进制止于 3.10.11（3.10.12+ 仅源码安全版本）；
+# 本机已验收的 v0.1.1 bundle 是手工装配的 3.10.14，网关只用 stdlib + keyring，
+# 补丁级差异无行为影响。注意：不装 openai —— 核心 reasoner 走 stdlib HTTP。
 param([switch]$Force)
 
 $ErrorActionPreference = "Stop"
 $repo = Split-Path -Parent $PSScriptRoot
 $dest = Join-Path $repo "frontend\src-tauri\resources\python"
-$pythonVersion = "3.10.14"
+$pythonVersion = "3.10.11"
 
 if (Test-Path (Join-Path $dest "python.exe")) {
     if (-not $Force) {
