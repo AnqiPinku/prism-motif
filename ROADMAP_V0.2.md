@@ -241,19 +241,19 @@ tests/
     fake_mcp_server.py
 ```
 
-- [ ] 保持运行时零依赖；测试优先使用 unittest；
-- [ ] Fake Provider 覆盖流式、重试、断流、空响应、工具调用；
-- [ ] Fake MCP 覆盖握手、超时、退出、错误、超长结果与风险元数据；
-- [ ] Gateway 测试不依赖真实 API Key；
-- [ ] 主仓执行真正 MCP 集成测试，不再静默 SKIP。
+- [x] 保持运行时零依赖；测试优先使用 unittest；
+- [x] Fake Provider 覆盖流式、重试、断流、空响应、工具调用；
+- [x] Fake MCP 覆盖握手、超时、退出、错误、超长结果与风险元数据；
+- [x] Gateway 测试不依赖真实 API Key；
+- [x] 主仓执行真正 MCP 集成测试，不再静默 SKIP。
 
 ### 2.2 前端事件状态机
 
-- [ ] 从 App.tsx 抽出纯 `reduceChatEvent`；
-- [ ] 覆盖全部 ChatEvent；
-- [ ] 覆盖 EOF 无 done、重复事件、迟到事件、取消后事件；
-- [ ] SSE 网络层与 UI 状态层分离；
-- [ ] 前端零 Lint 警告。
+- [x] 从 App.tsx 抽出纯 `reduceChatEvent`；
+- [x] 覆盖全部 ChatEvent；
+- [x] 覆盖 EOF 无 done、重复事件、迟到事件、取消后事件；
+- [x] SSE 网络层与 UI 状态层分离；
+- [x] 前端零 Lint 警告。
 
 ### 2.3 CI
 
@@ -268,14 +268,18 @@ tests/
 
 ### 2.4 稳定性
 
-- [ ] 连续 20 回合聊天；
-- [ ] 中途取消 5 次；
-- [ ] Provider 失败 5 次；
-- [ ] MCP 超时 3 次；
-- [ ] 无遗留进程；
-- [ ] 无损坏线程；
-- [ ] SSE 连接回落；
-- [ ] 内存不持续线性增长。
+- [x] 连续 20 回合聊天；
+- [x] 中途取消 5 次；
+- [x] Provider 失败 5 次；
+- [x] MCP 超时 3 次；
+- [x] 无遗留进程；
+- [x] 无损坏线程；
+- [x] SSE 连接回落；
+- [x] 内存不持续线性增长。
+
+已落地：`tests/soak_test.py`（真实 Gateway 进程 + Fake Provider/MCP 全离线，另含
+1 次同线程抢占；每操作后校验 /api/state 秒回、线程档案可解析、TCP 不累积；
+2026-07-12 本机 20.8s 全过，进 CI 为独立步骤）。
 
 ### 验收
 
@@ -283,6 +287,8 @@ tests/
 - Rust 有实际测试，不再是 0 tests；
 - 关键验证不需真实 Key；
 - 20 回合 Soak Test 通过。
+
+（以上四条 2026-07-12 全部达成，Phase 2 完成。）
 
 ---
 

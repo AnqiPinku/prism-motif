@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import threading
+import time
 from collections import Counter
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -37,6 +38,8 @@ class FakeProvider:
 
                 if model == "retry" and owner.counts[model] < 3:
                     return self._json({"error": {"message": "busy"}}, 503)
+                if model == "down":
+                    return self._json({"error": {"message": "provider down"}}, 503)
                 if payload.get("stream"):
                     return self._stream(model)
                 if model == "tool":
@@ -79,6 +82,32 @@ class FakeProvider:
                     return
                 if model == "stream_error" and owner.counts[model] == 1:
                     event({"error": {"type": "server_error", "message": "retry me"}})
+                    return
+                if model == "slow":
+                    # 慢速流：给"中途取消"的测试留出断开窗口
+                    for chunk in ("think", "ing ", "slow", "ly"):
+                        event({"choices": [{"delta": {"content": chunk}}]})
+                        time.sleep(0.25)
+                    event({"choices": [], "usage": {"prompt_tokens": 11, "completion_tokens": 4}})
+                    self.wfile.write(b"data: [DONE]\n\n")
+                    self.wfile.flush()
+                    return
+                if model in ("tool_once", "tool_hang_once"):
+                    # 首次请求发一个工具调用，后续请求收尾成普通回答——避免 "tool"
+                    # 剧本每步都要工具、把回合拖满 max_steps
+                    if owner.counts[model] % 2 == 1:
+                        name = "hang" if model == "tool_hang_once" else "echo"
+                        arguments = "{}" if model == "tool_hang_once" else '{"value":5}'
+                        event({"choices": [{"delta": {"tool_calls": [{
+                            "index": 0,
+                            "id": "call-%s-%d" % (model, owner.counts[model]),
+                            "function": {"name": name, "arguments": arguments},
+                        }]}}]})
+                    else:
+                        event({"choices": [{"delta": {"content": "done"}}]})
+                    event({"choices": [], "usage": {"prompt_tokens": 11, "completion_tokens": 2}})
+                    self.wfile.write(b"data: [DONE]\n\n")
+                    self.wfile.flush()
                     return
                 if model == "tool":
                     event({"choices": [{"delta": {"tool_calls": [{
