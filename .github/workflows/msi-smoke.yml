@@ -1,0 +1,75 @@
+# ROADMAP 施工入口 15：在 windows-latest 干净主机复跑 MSI 安装烟雾测试。
+# 重（~40-60 分钟，含 release 构建 + PyInstaller 冻结），手动触发。
+# 链路：前端构建 → stage → 冻结 perception sidecar → 重建内置 CPython → tauri MSI
+#       → 静默安装 → 安装树校验 → 启动确认 Gateway 子进程 → 收口 → 静默卸载。
+name: MSI Smoke
+
+on:
+  workflow_dispatch:
+
+jobs:
+  msi:
+    runs-on: windows-latest
+    timeout-minutes: 90
+    defaults:
+      run:
+        working-directory: prism-motif
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: prism-motif
+
+      - name: Clone sibling MCP repositories
+        working-directory: ${{ github.workspace }}
+        run: |
+          git clone --depth=1 https://github.com/AnqiPinku/reaper-mcp-v2.git mcps/reaper-mcp
+          git clone --depth=1 https://github.com/AnqiPinku/music-perception-mcp.git mcps/music-perception-mcp
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: prism-motif/frontend/package-lock.json
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: prism-motif/frontend/src-tauri
+
+      - name: Build frontend
+        run: |
+          npm ci --prefix frontend
+          npm --prefix frontend run build
+
+      - name: Stage release package tree
+        run: python packaging/stage_pkg.py
+
+      - name: Freeze perception sidecar
+        working-directory: ${{ github.workspace }}/mcps/music-perception-mcp
+        run: |
+          pip install -r packaging/requirements-build.txt
+          python packaging/build_sidecar.py
+
+      - name: Rebuild bundled CPython runtime
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File packaging/make_python_runtime.ps1
+
+      - name: Build MSI
+        run: npm --prefix frontend exec tauri build
+
+      - name: Install / launch / uninstall smoke
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File tests/msi_install_smoke.ps1
+
+      - name: Upload MSI and logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: msi-smoke-artifacts
+          path: |
+            prism-motif/frontend/src-tauri/target/release/bundle/msi/*.msi
+            prism-motif/msi-*.log
+          if-no-files-found: ignore
