@@ -71,12 +71,19 @@ jobs:
       - name: Install / launch / uninstall smoke
         run: powershell -NoProfile -ExecutionPolicy Bypass -File tests/msi_install_smoke.ps1
 
-      - name: Upload MSI and logs
+      # 日志单独成小 artifact（几十 KB 秒下）；150MB 的 MSI 另放，失败排查不用拖着它。
+      - name: Upload install logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: msi-smoke-artifacts
-          path: |
-            prism-motif/frontend/src-tauri/target/release/bundle/msi/*.msi
-            prism-motif/msi-*.log
+          name: msi-smoke-logs
+          path: prism-motif/msi-*.log
+          if-no-files-found: ignore
+
+      - name: Upload MSI
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: msi-package
+          path: prism-motif/frontend/src-tauri/target/release/bundle/msi/*.msi
           if-no-files-found: ignore
