@@ -11,9 +11,10 @@
 - 产品安全测试 36 项、Rust 测试 3 项、前端 lint/build、Tauri debug build 与两个 MCP 自测均通过；
 - 真实 WebView 烟雾测试、日志扫描和正常关闭后的进程树验收已通过；
 - v0.1.1 MSI 已构建；管理安装、v0.1.0 → v0.1.1 真实升级、安装目录启动和卸载均通过，32 个非日志用户文件哈希保持不变；
-- 下一步先用 Windows-latest CI 补齐干净主机证据，再进入 Phase 2 的测试拆分与稳定性门禁；
+- v0.1.1-security 批次经 8 路对抗审查后修复三处（chatReducer 未知事件白屏、CORS 漏 X-Filename、Vite dev 认证断裂）并已提交，含真发消息的 WebView E2E 验证；
+- Windows CI 已就位：`.github/workflows/ci.yml`（push/PR：Python/Node/Rust/Staging/卫生检查）与 `msi-smoke.yml`（手动触发：sidecar 冻结 → 内置运行时重建 → MSI 构建 → 安装/启动/卸载烟雾）；
+- CI 首绿前置条件：先推两个 MCP 仓（本地已变基到洗净历史上，各余 2/4 个新提交待推），再推 prism-motif——主仓集成测试依赖 origin 上的 `transcribe_melody`；
 - 当前 Git 分支：`agent/v0-2-hardening`；
-- prism-motif 工作区在开工前干净；
 - reaper-mcp 存在用户原有的未跟踪 `TOOL_COVERAGE.md`，不得覆盖或删除。
 
 ## 先读
@@ -25,17 +26,18 @@
 
 ## 当前施工顺序
 
-1. 增加 Windows CI，在干净 runner 复跑 Python、Node、Rust、Staging 与 MSI 安装烟雾测试；
-2. 完成 Phase 2 的 Fake Provider/MCP 与前端事件 reducer；
-3. 完成 20 回合 Soak Test；
-4. 按 `ROADMAP_V0.2.md` 继续 Phase 3–5。
+1. 推送两个 MCP 仓与 prism-motif，让 CI 首绿；手动 dispatch `MSI Smoke` 拿到干净主机安装证据（ROADMAP 施工入口 15）；
+2. 完成 Phase 2 的 20 回合 Soak Test 与稳定性门禁（Fake Provider/MCP 与前端 reducer 已落地）；
+3. 按 `ROADMAP_V0.2.md` 继续 Phase 3–5。
 
 ## 必跑验证
 
 ```powershell
 python test_core.py
 python -m unittest discover -s tests -v
+python tests\check_repo_hygiene.py
 npm --prefix frontend run lint
+npm --prefix frontend run test
 npm --prefix frontend run build
 C:\Users\XAQ\.cargo\bin\cargo.exe test --locked --manifest-path frontend/src-tauri/Cargo.toml
 powershell -NoProfile -ExecutionPolicy Bypass -File tests\run_tauri_smoke.ps1

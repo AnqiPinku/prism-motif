@@ -1,0 +1,75 @@
+# Phase 2.3 CI 门禁：Python / Node / Rust 测试、Staging、仓库卫生与元数据一致性。
+# 干净 windows-latest runner 复现本机验证；MSI 安装烟雾测试在 msi-smoke.yml（手动触发）。
+#
+# 布局约定：主仓 checkout 到 prism-motif/，两个兄弟 MCP 仓克隆到 mcps/，
+# 与本机 <root>/prism-motif + <root>/mcps 的目录关系一致（staging 与真实 MCP 集成测试依赖它）。
+name: CI
+
+on:
+  push:
+    branches: [main, "agent/**"]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: prism-motif
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: prism-motif
+
+      - name: Clone sibling MCP repositories
+        working-directory: ${{ github.workspace }}
+        run: |
+          git clone --depth=1 https://github.com/AnqiPinku/reaper-mcp-v2.git mcps/reaper-mcp
+          git clone --depth=1 https://github.com/AnqiPinku/music-perception-mcp.git mcps/music-perception-mcp
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: prism-motif/frontend/package-lock.json
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: prism-motif/frontend/src-tauri
+
+      - name: Install gateway runtime dependencies
+        run: pip install -r requirements.txt
+
+      - name: Node install / lint / test / build
+        run: |
+          npm ci --prefix frontend
+          npm --prefix frontend run lint
+          npm --prefix frontend run test
+          npm --prefix frontend run build
+
+      - name: Python product tests
+        run: python -m unittest discover -s tests -v
+
+      - name: Stage release package tree
+        run: python packaging/stage_pkg.py
+
+      - name: Rust tests
+        run: cargo test --locked --manifest-path frontend/src-tauri/Cargo.toml
+
+      - name: Rust release check
+        run: cargo check --release --locked --manifest-path frontend/src-tauri/Cargo.toml
+
+      - name: Repository hygiene
+        run: python tests/check_repo_hygiene.py
