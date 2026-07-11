@@ -38,6 +38,10 @@ function Write-InstallDiagnostics {
     }
     Write-Output "== $env:ProgramFiles =="
     Get-ChildItem $env:ProgramFiles -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Name
+    if (Test-Path $InstallDir) {
+        Write-Output "== $InstallDir (top level) =="
+        Get-ChildItem $InstallDir -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Name
+    }
     Write-Output "== registry uninstall entries matching Prism =="
     foreach ($hive in @("HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall",
             "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall")) {
@@ -65,7 +69,8 @@ if (-not (Test-Path $wv2Key)) {
 $install = Start-Process msiexec -ArgumentList "/i `"$MsiPath`" /qn /norestart /L*v msi-install.log" -Wait -PassThru
 Write-Output "msiexec client exit: $($install.ExitCode)"
 if ($install.ExitCode -ne 0) { Write-InstallDiagnostics; throw "msiexec install exit $($install.ExitCode)" }
-$exe = Join-Path $InstallDir "Prism Motif.exe"
+# tauri MSI 的主程序按 Cargo 包名装为 app.exe；productName 只决定安装目录与快捷方式名
+$exe = Join-Path $InstallDir "app.exe"
 Wait-Until { Test-Path $exe } 1200 "installed exe at $exe"
 
 # ---- 安装树校验：必需项存在、禁入项缺席 ----
