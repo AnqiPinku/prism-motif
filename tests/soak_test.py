@@ -85,6 +85,17 @@ def fake_mcp_count() -> int:
         return -1
 
 
+def fake_mcp_details() -> str:
+    out = subprocess.run(
+        ["powershell", "-NoProfile", "-Command",
+         "Get-CimInstance Win32_Process -Filter \"Name='python.exe'\" | "
+         "Where-Object { $_.CommandLine -like '*fake_mcp_server.py*' } | "
+         "ForEach-Object { \"pid=$($_.ProcessId) parent=$($_.ParentProcessId) "
+         "created=$($_.CreationDate)\" }"],
+        capture_output=True, text=True)
+    return out.stdout.strip()
+
+
 class Soak:
     def __init__(self):
         self.data_root = Path(tempfile.mkdtemp(prefix="prism-soak-"))
@@ -221,6 +232,16 @@ class Soak:
                 self.check(False, "%s 后线程存档损坏" % label)
         conns = established_count(self.port)
         self.check(conns <= 3, "%s 后 TCP 连接不累积（当前 %d）" % (label, conns))
+        # 每个操作后 MCP 都必须归零（回合 finally 里 toolhub.close 收口）——
+        # 带 5s 宽限；失败时打印残留进程详情，直接指认泄漏源头。
+        deadline = time.time() + 5
+        count = fake_mcp_count()
+        while count != 0 and time.time() < deadline:
+            time.sleep(0.5)
+            count = fake_mcp_count()
+        self.check(count == 0, "%s 后 MCP 子进程归零（当前 %d）" % (label, count))
+        if count != 0:
+            print("    残留详情: %s" % (fake_mcp_details() or "(取不到)"))
         self.rss_samples.append(rss_bytes(self.gateway.pid))
 
     @staticmethod
@@ -290,6 +311,12 @@ class Soak:
                 break
             time.sleep(1)
         self.check(count == 0, "%s：无遗留 MCP 子进程（当前 %d）" % (label, count))
+        if count != 0:
+            print("    残留详情: %s" % (fake_mcp_details() or "(取不到)"))
+            log_path = self.data_root / "gateway.log"
+            if log_path.exists():
+                print("    gateway.log 尾部:\n%s" %
+                      log_path.read_text(encoding="utf-8", errors="replace")[-2000:])
 
     # ---- 主流程 ----
 
