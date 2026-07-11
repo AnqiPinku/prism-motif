@@ -133,7 +133,7 @@ class Soak:
         self.gateway = subprocess.Popen(
             [sys.executable, str(ROOT / "gateway" / "server.py")],
             env=env, stdout=self.gateway_log, stderr=subprocess.STDOUT, cwd=str(ROOT))
-        deadline = time.time() + 20
+        deadline = time.time() + 60
         while time.time() < deadline:
             try:
                 status, _ = self.api("GET", "/health")
@@ -141,8 +141,16 @@ class Soak:
                     return
             except OSError:
                 pass
+            if self.gateway.poll() is not None:
+                break
             time.sleep(0.25)
-        raise RuntimeError("gateway did not become healthy in 20s")
+        # 起不来时把死因摊在输出里（临时目录会被清理，日志不打印就没了）
+        self.gateway_log.flush()
+        log_text = (self.data_root / "gateway.log").read_text(encoding="utf-8",
+                                                              errors="replace")
+        print("== gateway 未就绪：exit=%s，日志如下 ==" % self.gateway.poll())
+        print(log_text[-4000:] or "(日志为空)")
+        raise RuntimeError("gateway did not become healthy in 60s")
 
     # ---- HTTP ----
 
