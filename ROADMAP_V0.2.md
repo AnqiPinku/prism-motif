@@ -257,12 +257,14 @@ tests/
 
 ### 2.3 CI
 
-- [ ] Python 3.10 核心 / Gateway / Staging 测试；
-- [ ] Node `npm ci`、lint、build；
-- [ ] Windows Rust test、release check；
-- [ ] 禁止密钥、私有绝对路径和大音频文件；
-- [ ] 检查正式配置无 system-mcp；
-- [ ] 检查版本号、许可证和仓库地址一致。
+- [x] Python 3.10 核心 / Gateway / Staging 测试；
+- [x] Node `npm ci`、lint、build；
+- [x] Windows Rust test、release check；
+- [x] 禁止密钥、私有绝对路径和大音频文件；
+- [x] 检查正式配置无 system-mcp；
+- [x] 检查版本号、许可证和仓库地址一致。
+
+已落地：`.github/workflows/ci.yml`（push/PR，2026-07-11 首绿）+ `tests/check_repo_hygiene.py`。
 
 ### 2.4 稳定性
 
@@ -535,6 +537,6 @@ release: v0.2.0
 12. [x] 增加日志敏感信息扫描与子进程退出自动测试；
 13. [x] 构建 v0.1.1 MSI，并以管理安装验证完整文件树与禁入项；
 14. [x] 在无已安装版本的本机完成 v0.1.0 安装 → v0.1.1 升级 → 启动 → 卸载，确认用户数据不变；
-15. [ ] 在 Windows-latest 干净主机复跑安装烟雾测试。
+15. [x] 在 Windows-latest 干净主机复跑安装烟雾测试（2026-07-11，`msi-smoke.yml`：冻结 sidecar → 重建内置 CPython → MSI 构建 → 静默安装 → 安装树校验 → 启动确认 Gateway 子进程 → 收口零残留 → 静默卸载，全链路通过，MSI 与安装日志见 run artifact）。
 
 未完成 Phase 1 发布门之前，不开始 Phase 2–5 的功能性工作。
