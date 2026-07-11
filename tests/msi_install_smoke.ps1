@@ -23,7 +23,32 @@ function Wait-Until([scriptblock]$Condition, [int]$TimeoutSeconds, [string]$What
         if (& $Condition) { return }
         Start-Sleep -Seconds 2
     }
+    Write-InstallDiagnostics
     throw "timed out waiting for: $What"
+}
+
+# 超时自诊断：把失败原因直接摊在步骤日志里，省得下 artifact 再猜。
+function Write-InstallDiagnostics {
+    Write-Output "---- diagnostics ----"
+    foreach ($log in @("msi-install.log", "msi-uninstall.log")) {
+        if (Test-Path $log) {
+            Write-Output "== tail of $log =="
+            Get-Content $log -Tail 60 | ForEach-Object { $_ }
+        }
+    }
+    Write-Output "== $env:ProgramFiles =="
+    Get-ChildItem $env:ProgramFiles -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Name
+    Write-Output "== registry uninstall entries matching Prism =="
+    foreach ($hive in @("HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall",
+            "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall")) {
+        Get-ChildItem $hive -ErrorAction SilentlyContinue | ForEach-Object {
+            $name = (Get-ItemProperty $_.PSPath -ErrorAction SilentlyContinue).DisplayName
+            if ($name -like "*Prism*") { Write-Output "$name  ($($_.PSChildName))" }
+        }
+    }
+    Write-Output "== msiexec processes =="
+    Get-Process msiexec -ErrorAction SilentlyContinue | Select-Object Id, StartTime | Format-Table | Out-String
+    Write-Output "---- end diagnostics ----"
 }
 
 # WebView2 Evergreen 运行时（干净 runner 可能没有；官方 bootstrapper）
@@ -38,9 +63,10 @@ if (-not (Test-Path $wv2Key)) {
 
 # ---- 安装 ----
 $install = Start-Process msiexec -ArgumentList "/i `"$MsiPath`" /qn /norestart /L*v msi-install.log" -Wait -PassThru
-if ($install.ExitCode -ne 0) { throw "msiexec install exit $($install.ExitCode)" }
+Write-Output "msiexec client exit: $($install.ExitCode)"
+if ($install.ExitCode -ne 0) { Write-InstallDiagnostics; throw "msiexec install exit $($install.ExitCode)" }
 $exe = Join-Path $InstallDir "Prism Motif.exe"
-Wait-Until { Test-Path $exe } 600 "installed exe at $exe"
+Wait-Until { Test-Path $exe } 1200 "installed exe at $exe"
 
 # ---- 安装树校验：必需项存在、禁入项缺席 ----
 $bundledPython = Join-Path $InstallDir "resources\python\python.exe"
