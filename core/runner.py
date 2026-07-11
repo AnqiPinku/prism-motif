@@ -213,11 +213,14 @@ def run_turn(goal, provider=None, on_event=None, thread_id=None, permission=None
     toolhub = ToolHub(enabled, tool_timeout=_settings().get("tool_timeout_s", 60))
     _notify({"type": "mcp_start", "server_count": len(enabled),
              "content": "正在连接 MCP 服务"})
-    toolhub.start()
-    _notify({"type": "mcp_ready", "server_count": len(enabled),
-             "tool_count": len(toolhub.specs()), "content": "MCP 工具已就绪"})
 
     try:
+        # start() 之后的任何异常（含取消信号在 emit 里抛出）都必须走到 finally 的
+        # toolhub.close()，否则 MCP 子进程成孤儿——取消恰落在 MCP 启动窗口时必现。
+        toolhub.start()
+        _notify({"type": "mcp_ready", "server_count": len(enabled),
+                 "tool_count": len(toolhub.specs()), "content": "MCP 工具已就绪"})
+
         # 上下文压缩"透镜"：发给模型的消息做工具结果消隐 + 上报占用，磁盘仍存全本（领域无关）。
         ctx = settings.get("context") or {}
         raw_reasoner = reasoner            # 摘要压实用原始模型（不经透镜，避免递归/重复上报）
