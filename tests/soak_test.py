@@ -128,7 +128,8 @@ class Soak:
 
         env = dict(**__import__("os").environ)
         env.update({"PRISM_DATA_DIR": str(self.data_root), "PRISM_PORT": str(self.port),
-                    "PRISM_SESSION_TOKEN": TOKEN, "PRISM_INSTANCE_ID": "soak"})
+                    "PRISM_SESSION_TOKEN": TOKEN, "PRISM_INSTANCE_ID": "soak",
+                    "PYTHONIOENCODING": "utf-8"})   # 与 Tauri 壳一致，防 en-US locale 编码崩溃
         self.gateway_log = open(self.data_root / "gateway.log", "wb")
         self.gateway = subprocess.Popen(
             [sys.executable, str(ROOT / "gateway" / "server.py")],
