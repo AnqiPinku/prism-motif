@@ -8,6 +8,14 @@ import threading
 from pathlib import Path
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+# 非中文 locale（如 en-US 的 cp1252）下重定向 stdout 时，启动横幅的中文会
+# UnicodeEncodeError 直接杀死进程。Tauri 壳已设 PYTHONIOENCODING 兜底；这里
+# 自防护，保证手动/脚本方式启动同样不受 locale 影响。
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
