@@ -6,6 +6,12 @@ import {
   getJSON, postJSON, streamChat, respondPermission, uploadAudio, inTauri,
   type State, type ReaperStatus, type ChatEvent,
 } from './api'
+import {
+  buildMetrics, cancelChat, createChatState, decidePermission, failChat, isActiveRun,
+  reduceChatEvent, replaceConversation, startChat,
+  type ChatState, type Chip, type Item, type Msg, type ProcessingPhase,
+  type RunMeta, type RunSummary, type RunTone, type RunTool,
+} from './chatReducer'
 
 // 历史标题里可能截进附件行（旧存档），显示前清掉
 const cleanTitle = (s: string) => s.replace(/\[音频文件:[^\]]*\]?/g, '').trim()
@@ -50,76 +56,24 @@ const I = ({ n, s }: { n: string; s?: number }) => (
   <span className="material-symbols-outlined" style={s ? { fontSize: s } : undefined} aria-hidden>{n}</span>
 )
 
-type Chip = { kind: 'chip'; tone: 'ok' | 'err' | 'run'; label: string; detail?: string }
-type ProcessingPhase = 'connecting' | 'thinking' | 'generating' | 'tool' | 'retry'
-type RunTone = 'run' | 'ok' | 'err' | 'info'
-type RunTool = { id: string; name: string; tone: RunTone; durationMs?: number; contentChars?: number; detail?: string; truncated?: boolean; originalChars?: number }
-type RunSummary = { kind: 'run'; durationMs: number; status: 'ok' | 'err'; tools: RunTool[]; reason?: string }
-type RunMeta = {
-  provider?: string; model?: string; workspace?: string; step?: number; maxSteps?: number;
-  toolCount?: number; promptPct?: number; promptTokens?: number; contextWindow?: number;
-  ttftMs?: number; outputChars?: number; heartbeatIdleMs?: number; lastEvent?: string;
-}
-type RunActiveState =
-  | { status: 'connecting'; requestedAt: number; phase: 'connecting'; work: string; tools: RunTool[]; meta: RunMeta }
-  | { status: 'running'; startedAt: number; phase: ProcessingPhase; work: string; tools: RunTool[]; meta: RunMeta }
-type RunState =
-  | { status: 'idle' }
-  | RunActiveState
-  | { status: 'done'; startedAt: number; endedAt: number; tools: RunTool[]; reason?: string }
-  | { status: 'error'; startedAt: number; endedAt: number; tools: RunTool[]; reason?: string }
-type Tile = { label: string; value: string; unit?: string }
-type Item =
-  | Chip
-  | RunSummary
-  | { kind: 'trace'; text: string }
-  | { kind: 'perm'; id: string; label: string; decided?: string }
-  | { kind: 'metrics'; title: string; tiles: Tile[] }
-
-// 音频分析类工具的 JSON 结果 → 指标磁贴（设计稿的"工程分析"卡）；解析不了就返回 null 走普通 chip。
-function buildMetrics(name?: string, content?: string): { title: string; tiles: Tile[] } | null {
-  if (!name || !content) return null
-  let d: Record<string, any>
-  try { d = JSON.parse(content) } catch { return null }
-  if (typeof d !== 'object' || d === null) return null
-  const tiles: Tile[] = []
-  if (/analyze_audio|measure_loudness/.test(name)) {
-    if (typeof d.key?.key === 'string') tiles.push({ label: '调性', value: `${d.key.key} ${d.key.mode || ''}`.trim() })
-    if (typeof d.tempo?.bpm === 'number') tiles.push({ label: '速度', value: String(d.tempo.bpm), unit: 'BPM' })
-    if (typeof d.loudness?.integrated_lufs === 'number') tiles.push({ label: '响度', value: String(d.loudness.integrated_lufs), unit: 'LUFS' })
-    if (typeof d.loudness?.loudness_range_lu === 'number') tiles.push({ label: '动态范围', value: String(d.loudness.loudness_range_lu), unit: 'LU' })
-    if (typeof d.loudness?.true_peak_dbtp === 'number') tiles.push({ label: '真峰值', value: String(d.loudness.true_peak_dbtp), unit: 'dBTP' })
-    if (typeof d.duration_seconds === 'number') tiles.push({ label: '长度', value: String(d.duration_seconds), unit: '秒' })
-    return tiles.length >= 2 ? { title: '音频分析', tiles: tiles.slice(0, 6) } : null
-  }
-  if (/listen_subjective/.test(name)) {
-    // Gemini 听感：0-100 越低越好的四项 + 情绪
-    if (typeof d.mood === 'string') tiles.push({ label: '情绪', value: d.mood })
-    for (const [k, label] of [['muddy', '浑浊'], ['harsh', '刺耳'], ['sibilant', '齿音'], ['bright', '明亮']] as const)
-      if (typeof d[k] === 'number') tiles.push({ label, value: String(d[k]), unit: '/100' })
-    return tiles.length >= 2 ? { title: 'Gemini 听感', tiles: tiles.slice(0, 6) } : null
-  }
-  return null
-}
-type Msg = { role: 'user' | 'assistant'; text: string; items: Item[]; streaming?: boolean }
-
 export default function App() {
   const [state, setState] = useState<State | null>(null)
   const [reaper, setReaper] = useState<ReaperStatus | null>(null)
   const [settings, setSettings] = useState<SettingsData | null>(null)
-  const [threadId, setThreadId] = useState<string | null>(null)
-  const [msgs, setMsgs] = useState<Msg[]>([])
   const [input, setInput] = useState('')
-  const [sending, setSending] = useState(false)
   const [processingNow, setProcessingNow] = useState(Date.now())
-  const [run, setRun] = useState<RunState>({ status: 'idle' })
-  const [bypass, setBypassState] = useState(() => localStorage.getItem('pm_trust') === '1')
-  const setBypass = (v: boolean) => { setBypassState(v); localStorage.setItem('pm_trust', v ? '1' : '0') }
+  const [chat, setChat] = useState<ChatState>(() => createChatState())
+  const chatRef = useRef(chat)
+  const { messages: msgs, threadId, sending, run } = chat
+  const applyChat = useCallback((next: ChatState) => {
+    chatRef.current = next
+    setChat(next)
+  }, [])
+  const [bypass, setBypass] = useState(false)
   const [statusOpen, setStatusOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [onboarding, setOnboarding] = useState(false)
   const abort = useRef<AbortController | null>(null)
-  const runRef = useRef<RunState>({ status: 'idle' })
   const msgsRef = useRef<HTMLDivElement>(null)
 
   // 聊天附音频：+ 号选文件 → 传给 gateway 落盘 → 显示为附件胶囊，路径发送时才拼进消息
@@ -212,206 +166,12 @@ export default function App() {
     return () => window.clearInterval(id)
   }, [runActive])
 
-  const patchLast = (fn: (m: Msg) => Msg) =>
-    setMsgs((prev) => prev.map((m, i) => (i === prev.length - 1 ? fn(m) : m)))
-
-  const setRunState = useCallback((updater: RunState | ((prev: RunState) => RunState)) => {
-    const next = typeof updater === 'function' ? (updater as (p: RunState) => RunState)(runRef.current) : updater
-    runRef.current = next
-    setRun(next)
-  }, [])
-
-  const isActiveRun = (r: RunState): r is RunActiveState =>
-    r.status === 'connecting' || r.status === 'running'
-
-  const acceptRun = (phase: ProcessingPhase, work: string, meta?: Partial<RunMeta>) => {
+  const onEvent = (event: ChatEvent) => {
     const now = Date.now()
-    setProcessingNow(now)
-    setRunState((prev) => {
-      if (prev.status === 'running') {
-        return { ...prev, phase, work, meta: { ...prev.meta, ...(meta || {}) } }
-      }
-      if (prev.status === 'connecting') {
-        return {
-          status: 'running',
-          startedAt: now,
-          phase,
-          work,
-          tools: prev.tools,
-          meta: { ...prev.meta, ...(meta || {}) },
-        }
-      }
-      return {
-        status: 'running',
-        startedAt: now,
-        phase,
-        work,
-        tools: [],
-        meta: { ...(meta || {}) },
-      }
-    })
-  }
-
-  const updateRunMeta = (meta: Partial<RunMeta>) => setRunState((prev) =>
-    isActiveRun(prev) ? { ...prev, meta: { ...prev.meta, ...meta } } : prev)
-
-  const upsertRunTool = (tool: RunTool) => setRunState((prev) => {
-    if (!isActiveRun(prev)) return prev
-    const idx = prev.tools.findIndex((t) => t.id === tool.id)
-    const tools = idx < 0 ? [...prev.tools, tool].slice(-6) : prev.tools.map((t, i) => (i === idx ? { ...t, ...tool } : t))
-    return { ...prev, tools }
-  })
-
-  const turnStartRef = useRef<number>(0)   // 回合真正的开始时刻（send 那一瞬），finishRun 用它算 duration
-  const finishRun = (status: 'ok' | 'err' = 'ok', reason?: string) => {
-    const current = runRef.current
-    if (!isActiveRun(current)) return
-    const end = Date.now()
-    const start = turnStartRef.current
-      || (current.status === 'running' ? current.startedAt : current.requestedAt)
-    const summary: RunSummary = {
-      kind: 'run',
-      durationMs: Math.max(0, end - start),
-      status,
-      reason,
-      tools: current.tools,
-    }
-    setProcessingNow(end)
-    setRunState(status === 'ok'
-      ? { status: 'done', startedAt: start, endedAt: end, tools: current.tools, reason }
-      : { status: 'error', startedAt: start, endedAt: end, tools: current.tools, reason })
-    setSending(false)
-    turnStartRef.current = 0                    // 清起点，别污染下一轮
-    patchLast((m) => ({
-      ...m,
-      items: [summary, ...m.items.filter((it) => it.kind !== 'run')],
-    }))
-  }
-
-  const onEvent = (e: ChatEvent) => {
-    if (e.type === 'sse_open') {
-      setRunState((prev) => prev.status === 'connecting'
-        ? { ...prev, work: e.message || 'SSE 已连接，等待服务端接受请求' }
-        : prev)
-    }
-    else if (e.type === 'heartbeat') {
-      updateRunMeta({ heartbeatIdleMs: e.idle_ms, lastEvent: e.last_event })
-    }
-    else if (e.type === 'thread') {
-      acceptRun('thinking', '线程已建立，等待模型响应')
-      setThreadId(e.id)
-    }
-    else if (e.type === 'turn_start') {
-      acceptRun('thinking', e.content || '正在初始化会话', {
-        provider: e.provider,
-        model: e.model,
-        workspace: e.workspace,
-      })
-    }
-    else if (e.type === 'mcp_start') {
-      acceptRun('thinking', e.content || '正在连接 MCP 服务')
-    }
-    else if (e.type === 'mcp_ready') {
-      acceptRun('thinking', e.content || 'MCP 工具已就绪', { toolCount: e.tool_count })
-    }
-    else if (e.type === 'prompt_ready') {
-      acceptRun('thinking', e.content || '上下文已准备')
-    }
-    else if (e.type === 'loop_start') {
-      acceptRun('thinking', 'Agent 循环已开始', { maxSteps: e.max_steps, toolCount: e.tool_count })
-    }
-    else if (e.type === 'model_start') {
-      acceptRun('thinking', `第 ${e.step || 1} 步请求模型`, { step: e.step, toolCount: e.tool_count })
-    }
-    else if (e.type === 'model_first_delta') {
-      acceptRun('generating', '正在生成回复', { step: e.step, ttftMs: e.ttft_ms })
-    }
-    else if (e.type === 'model_done') {
-      updateRunMeta({ step: e.step, outputChars: e.delta_chars })
-    }
-    else if (e.type === 'tool_batch') {
-      acceptRun('tool', `模型请求 ${e.count || 0} 个工具`, { step: e.step })
-    }
-    else if (e.type === 'content_start') {                             // 三段式：开头
-      patchLast((m) => ({ ...m, streaming: true }))
-    }
-    else if (e.type === 'delta') {
-      acceptRun('generating', '正在生成回复')
-      patchLast((m) => ({ ...m, streaming: true, text: m.text + (e.text || '') }))
-    }
-    else if (e.type === 'content_end' || e.type === 'message_complete') { // 三段式：收尾 → 切 Markdown
-      patchLast((m) => ({ ...m, streaming: false }))
-    }
-    else if (e.type === 'tool_call') {
-      acceptRun('tool', `正在执行 ${e.name}`)
-      upsertRunTool({ id: e.id || e.name, name: e.name, tone: 'run' })
-    }
-    else if (e.type === 'tool_start') {
-      acceptRun('tool', `正在执行 ${e.name}`)
-      upsertRunTool({ id: e.id || e.name, name: e.name, tone: 'run' })
-    }
-    else if (e.type === 'tool_result') {
-      acceptRun('thinking', '等待模型继续')
-      if (e.name) {
-        upsertRunTool({
-          id: e.id || e.name,
-          name: e.name,
-          tone: e.is_error ? 'err' : 'ok',
-          durationMs: e.duration_ms,
-          contentChars: e.content_chars,
-          detail: (e.content || '').trim(),                   // 详情随 RunSummary 一起归纳
-          truncated: e.truncated,                              // 服务端截过 2KB？UI 提供"看完整"
-          originalChars: e.original_chars,
-        })
-      }
-      // 结构化的音频分析结果升级成指标卡（RunSummary 展开也能看原始 JSON）
-      const metrics = e.is_error ? null : buildMetrics(e.name, e.content)
-      if (metrics) patchLast((m) => ({ ...m, items: [...m.items, { kind: 'metrics', ...metrics }] }))
-    }
-    else if (e.type === 'permission_request') {
-      acceptRun('tool', `等待确认 ${e.name}`)
-      patchLast((m) => ({ ...m, items: [...m.items, { kind: 'perm', id: e.id, label: e.name }] }))
-    }
-    else if (e.type === 'permission_result') {          // 服务端最终结局 → 卡片锁死状态
-      const label = { allow: '已允许', deny: '已拒绝', timeout: '已超时', disconnected: '已中断' }[e.outcome] || e.outcome
-      patchLast((m) => ({
-        ...m,
-        items: m.items.map((it) =>
-          it.kind === 'perm' && it.id === e.id && !it.decided ? { ...it, decided: label } : it),
-      }))
-    }
-    else if (e.type === 'context') {
-      const contextMeta = {
-        promptPct: e.pct,
-        promptTokens: e.prompt_tokens,
-        contextWindow: e.window,
-      }
-      if (isActiveRun(runRef.current)) updateRunMeta(contextMeta)
-      else acceptRun('thinking', '上下文已准备', contextMeta)
-    }
-    else if (e.type === 'retry') {
-      acceptRun('retry', e.content || '模型调用重试中')
-      patchLast((m) => ({ ...m, items: [...m.items, { kind: 'trace', text: e.content }] }))
-    }
-    else if (e.type === 'compaction') {
-      acceptRun('thinking', '正在整理上下文')
-      patchLast((m) => ({ ...m, items: [...m.items, { kind: 'trace', text: e.content }] }))
-    }
-    else if (e.type === 'loop_done') {
-      updateRunMeta({ step: e.steps })
-    }
-    // 三条终止分支都必须清 streaming —— 流式态用 plain-text 绕过 ReactMarkdown(index.css:247
-    // 那条降级),只有 content_end/message_complete 会 patch streaming:false,如果 backend 提前
-    // 走 final/done/error 没发过 content_end,消息就永远卡在 streaming=true,markdown 语法全部裸露
-    else if (e.type === 'final')
-      patchLast((m) => ({ ...m, streaming: false, text: m.text || e.text || '' }))
-    else if (e.type === 'done') {
-      patchLast((m) => ({ ...m, streaming: false }))
-      finishRun('ok')
-    }
-    else if (e.type === 'error') {
-      patchLast((m) => ({ ...m, streaming: false, text: '出错：' + (e.message || '') }))
-      finishRun('err', e.message)
+    const next = reduceChatEvent(chatRef.current, event, now)
+    if (next !== chatRef.current) {
+      applyChat(next)
+      if (isActiveRun(next.run)) setProcessingNow(now)
     }
   }
 
@@ -422,52 +182,36 @@ export default function App() {
     const goal = [text, ...atts.map((a) => `[音频文件: ${a.path}]`)].filter(Boolean).join('\n')
     setInput('')
     setAtts([])
-    setMsgs((m) => [...m, { role: 'user', text: goal, items: [] }, { role: 'assistant', text: '', items: [] }])
-    setSending(true)
     const requestedAt = Date.now()
-    turnStartRef.current = requestedAt          // 回合起点（finishRun 用它算完整耗时）
+    applyChat(startChat(chatRef.current, goal, requestedAt))
     setProcessingNow(requestedAt)
-    setRunState({
-      status: 'connecting',
-      requestedAt,
-      phase: 'connecting',
-      work: '正在连接模型服务',
-      tools: [],
-      meta: {},
-    })
     abort.current = new AbortController()
     try {
       await streamChat({ goal, provider: state?.providers.default || settings?.default, thread_id: threadId, bypass }, onEvent, abort.current.signal)
     } catch (err) {
+      const now = Date.now()
       if ((err as Error).name === 'AbortError') {
-        finishRun('err', '已停止')                                  // 收敛为终态、停计时器
+        applyChat(cancelChat(chatRef.current, now))
       } else {
-        finishRun('err', String(err))
-        patchLast((m) => ({ ...m, text: '请求失败：' + err }))
+        applyChat(failChat(chatRef.current, String(err), now))
       }
     } finally {
-      // 走到 finally 时如果 run 还是 active（干净退出但没收到 done——修 SSE 前的旧问题
-      // 已由 sawTerminal 抛错拦住，这里作最后兜底）
-      if (isActiveRun(runRef.current)) finishRun('ok')
-      setSending(false)
+      if (isActiveRun(chatRef.current.run)) {
+        applyChat(failChat(chatRef.current, '连接结束但未收到终止事件', Date.now()))
+      }
       abort.current = null
       loadState()
     }
   }
 
   const decide = (id: string, allow: boolean) => {
-    respondPermission(id, allow)
-    patchLast((m) => ({
-      ...m,
-      items: m.items.map((it) =>
-        it.kind === 'perm' && it.id === id ? { ...it, decided: allow ? '已允许' : '已拒绝' } : it),
-    }))
+    void respondPermission(id, allow)
+    applyChat(decidePermission(chatRef.current, id, allow))
   }
 
   const openThread = async (id: string) => {
     type Raw = { role: string; content?: string | null; tool_call_id?: string; tool_calls?: { id?: string; name: string }[] }
     const data = await getJSON<{ messages: Raw[] }>('/api/threads/' + encodeURIComponent(id))
-    setThreadId(id)
     // 静默切到该对话所属项目（记忆按工作区隔离，续聊要用对的域）
     const t = (state?.threads || []).find((x) => x.id === id)
     if (t) switchWsSilent(t.workspace && wsNames.includes(t.workspace) ? t.workspace : 'default')
@@ -513,10 +257,10 @@ export default function App() {
       }
     }
     flushRun(cur)
-    setMsgs(out)
+    applyChat(replaceConversation(chatRef.current, id, out))
   }
 
-  const newChat = () => { setThreadId(null); setMsgs([]) }
+  const newChat = () => applyChat(replaceConversation(chatRef.current, null, []))
 
   // 线程行 ⋯ 菜单：两段式删除确认（WebView2 的原生 confirm 不可靠，不用）
   const [menuFor, setMenuFor] = useState<string | null>(null)
@@ -564,10 +308,12 @@ export default function App() {
     localStorage.setItem('pm_wsExpanded', JSON.stringify([...next]))
     return next
   })
+  const currentWorkspace = state?.workspace.current
   useEffect(() => {   // 首次进来至少展开当前工作区
-    const cur = state?.workspace.current
-    if (cur) setExpandedWs((prev) => (prev.size ? prev : new Set([cur])))
-  }, [state?.workspace.current])
+    if (currentWorkspace) {
+      setExpandedWs((prev) => (prev.size ? prev : new Set([currentWorkspace])))
+    }
+  }, [currentWorkspace])
   // 每个分区独立的「展开显示」（超过 6 条）
   const [showAllWs, setShowAllWs] = useState<Set<string>>(new Set())
   const toggleShowAll = (ws: string) => setShowAllWs((prev) => {
@@ -915,6 +661,11 @@ export default function App() {
             })}
           </div>
         ) : null}
+        {bypass && (
+          <button className="trust-active" onClick={() => setBypass(false)} title="点击退出信任模式">
+            <I n="verified_user" s={17} />信任模式
+          </button>
+        )}
         <button className="iconbtn" aria-label="设置" onClick={() => setSettingsOpen(true)}><I n="settings" /></button>
         {inTauri && <WinControls />}
       </header>
@@ -1467,7 +1218,7 @@ function Rendered({ it, onDecide }: { it: Item; onDecide: (id: string, allow: bo
   return (
     <div className="perm">
       {it.decided ? <div className="q">{it.decided} · {it.label}</div> : <>
-        <div className="q">⚠ AI 想执行 {it.label}</div>
+        <div className="q">⚠ AI 想执行 {it.label}{it.risk ? ` · ${it.risk}` : ''}</div>
         <div className="acts">
           <button className="allow" onClick={() => onDecide(it.id, true)}>允许</button>
           <button className="deny" onClick={() => onDecide(it.id, false)}>拒绝</button>

@@ -79,7 +79,7 @@ def stage_config():
     modes["current"] = ""
     _dump(dst_cfg / "modes.json", modes)
 
-    # mcp_servers 用打包版:perception 指向冻结 exe,reaper/system 用 python → bundled CPython
+    # mcp_servers 用打包版:perception 指向冻结 exe,reaper 用 bundled CPython。
     pkg_mcp = ROOT / "config" / "mcp_servers.packaged.json"
     if pkg_mcp.exists():
         shutil.copy2(pkg_mcp, dst_cfg / "mcp_servers.json")
@@ -111,7 +111,7 @@ def stage_config():
 
 
 def stage_mcps():
-    """把 3 个 MCP 仓的**代码部分**拷到 build/mcps/,踢掉 .git/README/构建产物。
+    """把正式包需要的 REAPER MCP 代码拷到 build/mcps/。
     tauri.conf.json 里 resources 指向这里,避免把 .git 打进安装包。"""
     dst_root = ROOT / "build" / "mcps"
     if dst_root.exists():
@@ -123,14 +123,7 @@ def stage_mcps():
         src = mcps_root / "reaper-mcp" / sub
         if src.is_dir():
             copy_tree_no_pyc(src, dst_root / "reaper-mcp" / sub)
-    # system-mcp: 单文件 server.py 就够
-    src = mcps_root / "system-mcp"
-    if src.is_dir():
-        (dst_root / "system-mcp").mkdir()
-        for f in src.iterdir():
-            if f.is_file() and f.suffix == ".py":
-                shutil.copy2(f, dst_root / "system-mcp" / f.name)
-    # music-perception 用冻结产物,不 stage 源码
+    # music-perception 用冻结产物,不 stage 源码。system-mcp 不进入正式包。
 
 
 def stage_skills():

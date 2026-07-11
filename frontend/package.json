@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
+    "test": "tsc --noEmit -p tsconfig.test.json && node --test --experimental-strip-types tests/chatReducer.test.ts tests/api.test.ts",
     "preview": "vite preview"
   },
   "dependencies": {

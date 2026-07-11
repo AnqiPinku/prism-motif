@@ -66,12 +66,16 @@ class MCPClient:
         self._q = queue.Queue()
         self._reader = threading.Thread(target=self._read_loop, daemon=True)
         self._reader.start()
-        self._rpc("initialize", {
-            "protocolVersion": PROTOCOL_VERSION,
-            "capabilities": {},
-            "clientInfo": {"name": "prism-core", "version": "0.1"},
-        })
-        self._notify("notifications/initialized", {})
+        try:
+            self._rpc("initialize", {
+                "protocolVersion": PROTOCOL_VERSION,
+                "capabilities": {},
+                "clientInfo": {"name": "prism-core", "version": "0.1"},
+            })
+            self._notify("notifications/initialized", {})
+        except Exception:
+            self.close()
+            raise
 
     def list_tools(self):
         """tools/list → list[ToolSpec]。"""
@@ -97,8 +101,24 @@ class MCPClient:
 
     def close(self):
         if self.proc:
+            proc, self.proc = self.proc, None
             try:
-                self.proc.terminate()
+                if proc.stdin:
+                    proc.stdin.close()
+            except Exception:  # noqa: BLE001
+                pass
+            if proc.poll() is None:
+                try:
+                    proc.terminate()
+                    proc.wait(timeout=2)
+                except subprocess.TimeoutExpired:
+                    proc.kill()
+                    proc.wait(timeout=2)
+                except Exception:  # noqa: BLE001
+                    pass
+            try:
+                if proc.stdout:
+                    proc.stdout.close()
             except Exception:  # noqa: BLE001
                 pass
 

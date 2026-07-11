@@ -1,3 +1,5 @@
+import { apiFetch, inTauri } from './gatewaySession.ts'
+
 export interface State {
   providers: { default: string; names: string[]; windows: Record<string, number> }
   mcp: { name: string; enabled: boolean }[]
@@ -42,7 +44,7 @@ export type ChatEvent = SseEnvelope & (
   | { type: 'tool_batch'; step?: number; count?: number }
   | { type: 'tool_call' | 'tool_start'; id?: string; name: string; arguments: unknown; step?: number; index?: number; count?: number }
   | { type: 'tool_result'; id?: string; name?: string; is_error?: boolean; content?: string; duration_ms?: number; content_chars?: number; permission?: string; truncated?: boolean; original_chars?: number }
-  | { type: 'permission_request'; id: string; name: string; arguments: unknown }
+  | { type: 'permission_request'; id: string; name: string; arguments: unknown; risk?: 'write' | 'destructive' | 'execute' | 'external' | 'record' }
   | { type: 'permission_result'; id: string; outcome: 'allow' | 'deny' | 'timeout' | 'disconnected' }
   | { type: 'context'; prompt_tokens: number; window: number; pct: number }
   | { type: 'compaction'; kind?: string; count?: number; content: string }
@@ -54,22 +56,21 @@ export type ChatEvent = SseEnvelope & (
   | { type: 'done'; cancelled?: boolean }
 )
 
-// In the Tauri shell the UI is served from tauri:// (bundled), so the gateway is a
-// cross-origin absolute URL; in a plain browser it's same-origin (relative).
-export const inTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
-const API = inTauri ? 'http://127.0.0.1:8770' : ''
+export { inTauri }
 
 export async function getJSON<T>(url: string): Promise<T> {
-  const r = await fetch(API + url)
+  const r = await apiFetch(url)
+  if (!r.ok) throw new Error(`HTTP ${r.status}`)
   return r.json()
 }
 
 export async function postJSON<T = unknown>(url: string, body: unknown): Promise<T> {
-  const r = await fetch(API + url, {
+  const r = await apiFetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   })
+  if (!r.ok) throw new Error(`HTTP ${r.status}`)
   return r.json()
 }
 
@@ -80,7 +81,7 @@ export async function streamChat(
   onEvent: (e: ChatEvent) => void,
   signal: AbortSignal,
 ): Promise<void> {
-  const res = await fetch(API + '/api/chat', {
+  const res = await apiFetch('/api/chat', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
@@ -143,7 +144,7 @@ export const openExternal = (url: string) =>
 
 // 聊天附音频：传原始字节给 gateway，拿回本机路径（agent 的分析/转 MIDI 工具吃路径）。
 export async function uploadAudio(file: File): Promise<{ path?: string; error?: string }> {
-  const r = await fetch(API + '/api/upload', {
+  const r = await apiFetch('/api/upload', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/octet-stream',
@@ -151,5 +152,6 @@ export async function uploadAudio(file: File): Promise<{ path?: string; error?: 
     },
     body: file,
   })
+  if (!r.ok) throw new Error(`HTTP ${r.status}`)
   return r.json()
 }

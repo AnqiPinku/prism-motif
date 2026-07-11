@@ -1,5 +1,5 @@
 {
-  "_comment": "打包版 mcp_servers: perception 直接跑冻结 exe;reaper/system 通过 mcp_client 的 command=python → sys.executable 翻译用 bundled CPython 起。stage_pkg.py 打包时把此文件 rename 成 mcp_servers.json。",
+  "_comment": "正式包只带音乐所需的 reaper 与 perception MCP；通用系统执行服务仅保留在开发仓。stage_pkg.py 打包时把此文件 rename 成 mcp_servers.json。",
   "servers": [
     {
       "name": "reaper",
@@ -18,14 +18,6 @@
         "GEMINI_BASE_URL": "https://generativelanguage.googleapis.com/v1beta/openai/",
         "GEMINI_MODEL": "gemini-2.5-flash"
       }
-    },
-    {
-      "name": "system",
-      "enabled": false,
-      "command": "python",
-      "args": [
-        "${PRISM_HOME}/mcps/system-mcp/server.py"
-      ]
     }
   ]
 }
