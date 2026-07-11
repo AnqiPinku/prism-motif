@@ -65,6 +65,15 @@ jobs:
       - name: Stage release package tree
         run: python packaging/stage_pkg.py
 
+      # tauri build.rs 在编译期校验 bundle.resources 路径存在。内置 CPython 与冻结
+      # sidecar 是本机构建产物（gitignored），测试/检查不打包，空目录即可通过校验；
+      # msi-smoke.yml 里走真实构建，不用桩。
+      - name: Create resource stubs for compile-time validation
+        working-directory: ${{ github.workspace }}
+        run: |
+          New-Item -ItemType Directory -Force prism-motif/frontend/src-tauri/resources/python | Out-Null
+          New-Item -ItemType Directory -Force mcps/music-perception-mcp/dist/music_perception | Out-Null
+
       - name: Rust tests
         run: cargo test --locked --manifest-path frontend/src-tauri/Cargo.toml
 
