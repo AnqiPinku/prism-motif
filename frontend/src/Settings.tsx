@@ -24,6 +24,7 @@ export default function Settings({ state, trust, setTrust, onClose, onSaved, onO
   const [gBase, setGBase] = useState('')
   const [gModel, setGModel] = useState('')
   const [saving, setSaving] = useState(false)
+  const [hostChange, setHostChange] = useState<string | null>(null)
 
   useEffect(() => { getJSON<SettingsData>('/api/settings').then((d) => {
     setData(d); setDef(d.default); fill(d, d.default)
@@ -36,15 +37,31 @@ export default function Settings({ state, trust, setTrust, onClose, onSaved, onO
     setBaseUrl(p.base_url || ''); setModel(p.model || ''); setApiKey('')
   }
 
-  const save = async () => {
+  const save = async (confirmHostChange = false) => {
     setSaving(true)
     const gemini: Record<string, string> = { base_url: gBase.trim(), model: gModel.trim() }
     if (gKey.trim()) gemini.api_key = gKey.trim()
-    const body: Record<string, unknown> = { default: def, provider: pick, base_url: baseUrl.trim(), model: model.trim(), gemini }
+    const body: Record<string, unknown> = {
+      default: def,
+      provider: pick,
+      base_url: baseUrl.trim(),
+      model: model.trim(),
+      gemini,
+      confirm_host_change: confirmHostChange,
+    }
     if (apiKey.trim()) body.api_key = apiKey.trim()
-    const r = await postJSON<{ ok?: boolean; error?: string }>('/api/settings', body)
+    const r = await postJSON<{ ok?: boolean; error?: string; code?: string }>('/api/settings', body)
     setSaving(false)
-    if (r && r.ok === false) { alert(r.error || '保存失败'); return }
+    if (r && r.ok === false) {
+      if (r.code?.startsWith('confirm_')) {
+        setHostChange(r.error || '服务主机发生变化，请确认。')
+        return
+      }
+      alert(r.error || '保存失败')
+      return
+    }
+    setHostChange(null)
+    setTrust(false)
     onSaved(); onClose()
   }
 
@@ -54,7 +71,11 @@ export default function Settings({ state, trust, setTrust, onClose, onSaved, onO
     alert('已从环境变量导入到钥匙链。建议清除旧的 GEMINI_API_KEY 环境变量并轮换该 key。')
   }
 
-  const toggleMcp = async (name: string, enabled: boolean) => { await postJSON('/api/mcp/toggle', { name, enabled }); onSaved() }
+  const toggleMcp = async (name: string, enabled: boolean) => {
+    setTrust(false)
+    await postJSON('/api/mcp/toggle', { name, enabled })
+    onSaved()
+  }
   const toggleSkill = async (name: string, enabled: boolean) => { await postJSON('/api/skills/toggle', { name, enabled }); onSaved() }
 
   const providerNames = Object.keys(data?.providers || {})
@@ -136,7 +157,7 @@ export default function Settings({ state, trust, setTrust, onClose, onSaved, onO
           <div className="sec settings-sec">
             <h3>行为</h3>
             <div className="togglerow">信任模式
-              <span className="tag">跳过危险操作确认</span>
+              <span className="tag">仅本次启动；只跳过普通写操作</span>
               <button className={'switch' + (trust ? '' : ' off')} aria-label="信任模式" onClick={() => setTrust(!trust)} /></div>
             {onOpenOnboarding && (
               <div className="togglerow">重新查看引导
@@ -146,8 +167,14 @@ export default function Settings({ state, trust, setTrust, onClose, onSaved, onO
           </div>
 
           <div className="btnrow">
+            {hostChange && (
+              <div className="host-change-warning">
+                <span>{hostChange}</span>
+                <button className="btn" disabled={saving} onClick={() => save(true)}>确认更改并保存</button>
+              </div>
+            )}
             <button className="btn" onClick={onClose}>取消</button>
-            <button className="btn filled" onClick={save} disabled={saving}>{saving ? '保存中…' : '保存'}</button>
+            <button className="btn filled" onClick={() => save(false)} disabled={saving}>{saving ? '保存中…' : '保存'}</button>
           </div>
         </div>
       </div>

@@ -1,0 +1,53 @@
+{
+  "default": "write",
+  "tools": {
+    "reaper_status": "read",
+    "list_tracks": "read",
+    "get_midi_notes": "read",
+    "list_track_fx": "read",
+    "list_fx_presets": "read",
+    "list_installed_fx": "read",
+    "get_fx_params": "read",
+    "analyze_audio": "read",
+    "measure_loudness": "read",
+    "transcribe_melody": "read",
+
+    "set_tempo": "write",
+    "set_time_signature": "write",
+    "add_track": "write",
+    "update_track": "write",
+    "create_midi_item": "write",
+    "add_midi_notes": "write",
+    "add_track_fx": "write",
+    "set_fx_preset": "write",
+    "set_fx_param": "write",
+    "set_time_selection": "write",
+    "add_marker": "write",
+
+    "delete_track": "destructive",
+    "render_project": "destructive",
+    "reaper_call": "execute",
+    "run_lua": "execute",
+    "batch": "execute",
+    "listen_subjective": "external",
+
+    "run_command": "execute",
+    "write_file": "destructive",
+    "edit_file": "destructive",
+    "move_path": "destructive",
+    "delete_path": "destructive",
+
+    "transport": {
+      "risk": "write",
+      "when": [
+        {"argument": "action", "equals": "record", "risk": "record"}
+      ]
+    },
+    "render_to_wav": {
+      "risk": "write",
+      "when": [
+        {"argument": "out_path", "present": true, "risk": "destructive"}
+      ]
+    }
+  }
+}

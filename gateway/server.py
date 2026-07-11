@@ -1,5 +1,4 @@
-"""Prism Core 本地 Gateway：用标准库 http.server 提供前端静态文件 + JSON 接口 + SSE 聊天流。
-启动：python gateway/server.py  然后浏览器开 http://127.0.0.1:8770"""
+"""Prism Motif 本地 Gateway：提供静态文件、认证 JSON API 与 SSE 聊天流。"""
 import os
 import sys
 import json
@@ -20,6 +19,8 @@ from core.skills import (load_skills, add_skill, delete_skill,  # noqa: E402
                          load_enabled_map, set_enabled)
 from core.mcp_client import MCPClient                    # noqa: E402
 from core import threads as threads_mod                  # noqa: E402
+from gateway import auth as gateway_auth                 # noqa: E402
+from gateway.policy import ToolPolicy                    # noqa: E402
 
 WEB = ROOT / "web"                                       # 静态资源随代码走，只读即可
 CONFIG = paths.CONFIG_DIR                                # 可写状态：per-user 目录（发布）/ 就地（开发）
@@ -28,8 +29,7 @@ DATA = paths.DATA_DIR
 CTYPES = {".html": "text/html", ".js": "application/javascript",
           ".css": "text/css", ".json": "application/json", ".svg": "image/svg+xml"}
 
-# 需要用户确认的危险工具（写/删/执行）
-DANGEROUS = {"run_command", "write_file", "edit_file", "move_path", "delete_path"}
+TOOL_POLICY = ToolPolicy.from_file(paths.INSTALL_ROOT / "config" / "tool_policy.json")
 # 待确认的权限请求：id -> {"event": Event, "result": bool}
 PENDING = {}
 
@@ -49,6 +49,34 @@ def load_json(p, d):
         return json.loads(Path(p).read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return d
+
+
+def validate_endpoint(value, allow_empty=False):
+    """只允许 HTTPS；本地模型可使用 loopback HTTP。返回 (规范值, 错误)。"""
+    value = str(value or "").strip().rstrip("/")
+    if not value:
+        return ("", "") if allow_empty else ("", "地址不能为空")
+    try:
+        parsed = urlparse(value)
+        host = (parsed.hostname or "").lower()
+        _ = parsed.port  # 触发非法端口校验
+    except ValueError:
+        return "", "地址格式无效"
+    if parsed.username or parsed.password:
+        return "", "地址不能包含用户名或密码"
+    if parsed.scheme == "https" and host:
+        return value, ""
+    if parsed.scheme == "http" and host in {"127.0.0.1", "localhost", "::1"}:
+        return value, ""
+    return "", "只允许 HTTPS；本地模型可使用 localhost/127.0.0.1 的 HTTP"
+
+
+def endpoint_host(value):
+    """提取用于敏感变更比较的规范主机名。"""
+    try:
+        return (urlparse(str(value or "")).hostname or "").lower()
+    except ValueError:
+        return ""
 
 
 _BRIDGE_INSTALLER = None
@@ -81,6 +109,11 @@ class Handler(BaseHTTPRequestHandler):
     # ---------- GET ----------
     def do_GET(self):
         path = self.path.split("?")[0]
+        if path == "/health" or path.startswith("/api/"):
+            if not self._authorize_api():
+                return
+        if path == "/health":
+            return self._json(gateway_auth.health_payload())
         if path in ("/", ""):
             return self._serve("index.html")
         if path == "/api/state":
@@ -109,6 +142,8 @@ class Handler(BaseHTTPRequestHandler):
     # ---------- POST ----------
     def do_POST(self):
         path = self.path.split("?")[0]
+        if path.startswith("/api/") and not self._authorize_api():
+            return
         if path == "/api/upload":           # 原始字节流，须在 JSON 解析之前拦截
             return self._upload()
         body = self._read_body()
@@ -243,21 +278,54 @@ class Handler(BaseHTTPRequestHandler):
         except ValueError:
             return {}
 
-    def _send(self, code, data, ctype):
+    def _security_headers(self):
+        """发送所有响应共用的安全头和精确 Origin CORS。"""
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("X-Frame-Options", "DENY")
+        self.send_header("Referrer-Policy", "no-referrer")
+        self.send_header(
+            "Content-Security-Policy",
+            "default-src 'self'; script-src 'self'; "
+            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+            "font-src 'self' data: https://fonts.gstatic.com; "
+            "img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; "
+            "object-src 'none'; base-uri 'none'; form-action 'none'",
+        )
+        origin = gateway_auth.cors_origin(self.headers)
+        if origin:
+            self.send_header("Access-Control-Allow-Origin", origin)
+            self.send_header("Vary", "Origin")
+
+    def _authorize_api(self):
+        """统一保护所有 API 与健康接口。"""
+        ok, status, code = gateway_auth.authorize(self.headers)
+        if ok:
+            return True
+        self._json({"error": {"code": code, "message": "Gateway 请求未获授权"}}, status)
+        return False
+
+    def _send(self, code, data, ctype, extra_headers=None):
         if isinstance(data, str):
             data = data.encode("utf-8")
         self.send_response(code)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(data)))
-        self.send_header("Access-Control-Allow-Origin", "*")  # 桌面壳:前端从 tauri:// 跨源调本地 gateway
+        self._security_headers()
+        for name, value in (extra_headers or {}).items():
+            self.send_header(name, value)
         self.end_headers()
         self.wfile.write(data)
 
-    def do_OPTIONS(self):   # CORS 预检(POST application/json 会触发)
+    def do_OPTIONS(self):
+        """只为白名单 Origin 放行所需的 CORS 预检。"""
+        ok, status, code = gateway_auth.preflight_allowed(self.headers)
+        if not ok:
+            return self._json({"error": {"code": code, "message": "CORS 预检被拒绝"}}, status)
         self.send_response(204)
-        self.send_header("Access-Control-Allow-Origin", "*")
+        self._security_headers()
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, X-Filename, X-Prism-Session")
+        self.send_header("Access-Control-Max-Age", "600")
         self.send_header("Content-Length", "0")
         self.end_headers()
 
@@ -266,12 +334,18 @@ class Handler(BaseHTTPRequestHandler):
 
     def _serve(self, rel):
         target = (WEB / rel).resolve()
-        if not str(target).startswith(str(WEB.resolve())) or not target.is_file():
+        try:
+            target.relative_to(WEB.resolve())
+        except ValueError:
+            return self._json({"error": "not found"}, 404)
+        if not target.is_file():
             return self._json({"error": "not found"}, 404)
         ctype = CTYPES.get(target.suffix, "application/octet-stream")
         if ctype.startswith(("text/", "application/javascript", "application/json")):
             ctype += "; charset=utf-8"
-        self._send(200, target.read_bytes(), ctype)
+        cookie = gateway_auth.browser_cookie() if target.name == "index.html" else None
+        extra = {"Set-Cookie": cookie} if cookie else None
+        self._send(200, target.read_bytes(), ctype, extra_headers=extra)
 
     def _state(self):
         prov = load_json(CONFIG / "providers.json", {"default": "deepseek", "providers": {}})
@@ -392,13 +466,50 @@ class Handler(BaseHTTPRequestHandler):
 
     def _settings_save(self, body):
         prov = load_json(CONFIG / "providers.json", {"default": "deepseek", "providers": {}})
-        if body.get("default"):
-            prov["default"] = body["default"]
         name = body.get("provider")
         providers = prov.get("providers", {})
+        g = body.get("gemini") or {}
+
+        provider_url = None
+        if name and name in providers and "base_url" in body:
+            provider_url, error = validate_endpoint(body.get("base_url"), allow_empty=False)
+            if error:
+                return {"ok": False, "code": "invalid_provider_url", "error": error}
+        gemini_url = None
+        if "base_url" in g:
+            gemini_url, error = validate_endpoint(g.get("base_url"), allow_empty=True)
+            if error:
+                return {"ok": False, "code": "invalid_gemini_url", "error": error}
+
+        legacy_secrets = load_json(CONFIG / "secrets.json", {})
+        if provider_url is not None and name in providers:
+            old_url = providers[name].get("base_url", "")
+            old_host, new_host = endpoint_host(old_url), endpoint_host(provider_url)
+            has_key = (secrets_store.has_secret(name) or bool(legacy_secrets.get(name))
+                       or bool(os.environ.get(providers[name].get("api_key_env", ""))))
+            if old_host and new_host != old_host and has_key and not body.get("confirm_host_change"):
+                return {"ok": False, "code": "confirm_provider_host_change",
+                        "error": "模型服务主机将从 %s 改为 %s；确认后才会保存。" % (old_host, new_host),
+                        "from_host": old_host, "to_host": new_host}
+
+        mcp_cfg = load_json(CONFIG / "mcp_servers.json", {"servers": []})
+        perc = next((s for s in mcp_cfg.get("servers", [])
+                     if s.get("name") == "music-perception"), {})
+        old_gemini_url = (perc.get("env") or {}).get("GEMINI_BASE_URL", "")
+        if gemini_url is not None:
+            old_host, new_host = endpoint_host(old_gemini_url), endpoint_host(gemini_url)
+            has_key = (secrets_store.has_secret("GEMINI_API_KEY")
+                       or bool(os.environ.get("GEMINI_API_KEY")))
+            if old_host and new_host != old_host and has_key and not body.get("confirm_host_change"):
+                return {"ok": False, "code": "confirm_gemini_host_change",
+                        "error": "音频模型主机将从 %s 改为 %s；确认后才会保存。" % (old_host, new_host),
+                        "from_host": old_host, "to_host": new_host}
+
+        if body.get("default"):
+            prov["default"] = body["default"]
         if name and name in providers:
-            if "base_url" in body:
-                providers[name]["base_url"] = body["base_url"]
+            if provider_url is not None:
+                providers[name]["base_url"] = provider_url
             if "model" in body:
                 providers[name]["model"] = body["model"]
             if body.get("window_tokens"):
@@ -412,10 +523,9 @@ class Handler(BaseHTTPRequestHandler):
         try:
             if name and body.get("api_key"):
                 secrets_store.set_secret(name, body["api_key"])
-            g = body.get("gemini") or {}
             updates = {}
-            if "base_url" in g:
-                updates["GEMINI_BASE_URL"] = g["base_url"]
+            if gemini_url is not None:
+                updates["GEMINI_BASE_URL"] = gemini_url
             if "model" in g:
                 updates["GEMINI_MODEL"] = g["model"]
             if updates:
@@ -490,7 +600,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Cache-Control", "no-cache")
         self.send_header("Connection", "close")
         self.send_header("X-Accel-Buffering", "no")
-        self.send_header("Access-Control-Allow-Origin", "*")
+        self._security_headers()
         self.end_headers()
         self.close_connection = True   # 保险：do_POST 返回后 stdlib 立刻关 socket
 
@@ -609,7 +719,9 @@ class Handler(BaseHTTPRequestHandler):
             pass
 
         def permission(call):
-            if bypass or call.name not in DANGEROUS:
+            needs_confirmation, risk = TOOL_POLICY.requires_confirmation(
+                call.name, call.arguments, trust=bypass)
+            if not needs_confirmation:
                 return True
             if closed or cancel.is_set():        # 断线后不再发 permission_request
                 return False
@@ -618,7 +730,8 @@ class Handler(BaseHTTPRequestHandler):
             PENDING[pid] = {"event": ev, "result": False}
             try:
                 emit({"type": "permission_request", "id": pid,
-                      "name": call.name, "arguments": call.arguments})
+                      "name": call.name, "arguments": call.arguments,
+                      "risk": risk})
             except TurnCancelled:
                 PENDING.pop(pid, None); raise
             outcome = "timeout"                   # 300s 都没点 → 认作 timeout
@@ -681,14 +794,13 @@ def main():
     try:
         httpd = ThreadingHTTPServer(("127.0.0.1", port), Handler)
     except OSError as e:
-        msg = ("启动失败：端口 %d 被占用。\n"
-               "可能已经有一个 Prism Motif 在跑了(检查任务栏),或者其它软件占用了这个端口。\n\n"
-               "换个端口再启动:先 set PRISM_PORT=8771,再启动 app。\n\n"
+        msg = ("启动失败：本轮分配的本地端口 %d 被占用。\n"
+               "可能有其它进程在启动竞态中抢占了该端口；重新启动 Prism Motif 会分配新端口。\n\n"
                "原始错误:%s" % (port, e))
         print(msg)
         _write_startup_error(msg)
         return
-    print("Prism Core 前端已启动：http://127.0.0.1:%d  (Ctrl+C 退出)" % port)
+    print("Prism Motif Gateway 已启动：http://127.0.0.1:%d  (Ctrl+C 退出)" % port)
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:

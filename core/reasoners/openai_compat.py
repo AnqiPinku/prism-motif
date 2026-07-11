@@ -96,6 +96,7 @@ class OpenAICompatReasoner(Reasoner):
 
         text_acc = ""
         tool_acc = {}
+        saw_done = False
         with resp:
             for raw in resp:
                 line = raw.decode("utf-8", "replace").strip()
@@ -103,6 +104,7 @@ class OpenAICompatReasoner(Reasoner):
                     continue
                 data = line[5:].strip()
                 if data == "[DONE]":
+                    saw_done = True
                     break
                 try:
                     obj = json.loads(data)
@@ -138,6 +140,11 @@ class OpenAICompatReasoner(Reasoner):
                         acc["name"] = fn["name"]
                     if fn.get("arguments"):
                         acc["args"] += fn["arguments"]
+
+        if not saw_done:
+            if not text_acc and not tool_acc:
+                raise RetriableStreamError("provider stream ended before [DONE]")
+            raise RuntimeError("LLM 流提前结束：未收到 [DONE]")
 
         if tool_acc:
             calls = []

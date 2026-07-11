@@ -15,19 +15,23 @@ class ToolHub:
 
     def start(self):
         """启动所有 MCP server 并发现工具。"""
-        for s in self._servers:
-            client = MCPClient(s["command"], s.get("args", []), s.get("env"),
-                               timeout=self._tool_timeout)
-            client.start()
-            self._clients.append(client)
-            for spec in client.list_tools():
-                original = spec.name
-                exposed = original
-                if exposed in self._index:           # 重名 → 加 server 前缀消歧
-                    exposed = "%s__%s" % (s["name"], original)
-                    spec.name = exposed
-                self._index[exposed] = (client, original)
-                self._specs.append(spec)
+        try:
+            for s in self._servers:
+                client = MCPClient(s["command"], s.get("args", []), s.get("env"),
+                                   timeout=self._tool_timeout)
+                client.start()
+                self._clients.append(client)
+                for spec in client.list_tools():
+                    original = spec.name
+                    exposed = original
+                    if exposed in self._index:           # 重名 → 加 server 前缀消歧
+                        exposed = "%s__%s" % (s["name"], original)
+                        spec.name = exposed
+                    self._index[exposed] = (client, original)
+                    self._specs.append(spec)
+        except Exception:
+            self.close()
+            raise
 
     def specs(self):
         return list(self._specs)
@@ -44,3 +48,6 @@ class ToolHub:
     def close(self):
         for c in self._clients:
             c.close()
+        self._clients.clear()
+        self._index.clear()
+        self._specs.clear()

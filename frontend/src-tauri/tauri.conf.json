@@ -1,16 +1,15 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "Prism Motif",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "identifier": "com.prismmotif.app",
   "build": {
-    "frontendDist": "../../web",
-    "devUrl": "http://127.0.0.1:8770"
+    "frontendDist": "../../web"
   },
   "app": {
     "windows": [],
     "security": {
-      "csp": null
+      "csp": "default-src 'self' customprotocol: asset:; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: asset: http://asset.localhost; connect-src 'self' ipc: http://ipc.localhost http://127.0.0.1:*; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'"
     }
   },
   "bundle": {
@@ -29,8 +28,7 @@
       "resources/python": "resources/python",
       "../../build/pkg": "resources/app",
       "../../../mcps/music-perception-mcp/dist/music_perception": "resources/mcps/music-perception",
-      "../../build/mcps/reaper-mcp": "resources/mcps/reaper-mcp",
-      "../../build/mcps/system-mcp": "resources/mcps/system-mcp"
+      "../../build/mcps/reaper-mcp": "resources/mcps/reaper-mcp"
     },
     "android": {
       "debugApplicationIdSuffix": ".debug"

@@ -13,6 +13,21 @@ from .contracts import Message, ToolCall
 THREADS_LOCK = threading.RLock()
 
 
+def _safe_thread_id(thread_id):
+    """线程 ID 只能是单段安全文件名，禁止目录穿越与盘符。"""
+    value = str(thread_id or "").strip()
+    if not value or len(value) > 128 or value in {".", ".."} or ".." in value:
+        raise ValueError("非法线程 ID")
+    if any(not (c.isalnum() or c in "-_.") for c in value):
+        raise ValueError("非法线程 ID")
+    return value
+
+
+def _thread_path(threads_dir, thread_id):
+    """返回经过校验的线程文件路径。"""
+    return os.path.join(threads_dir, _safe_thread_id(thread_id) + ".json")
+
+
 def _serialize(messages):
     out = []
     for m in messages:
@@ -32,7 +47,7 @@ def save_thread(threads_dir, thread_id, config, messages):
     而当前回合手里的 config.workspace 是回合开始时的旧值——不用 disk 覆盖就会退回旧值。"""
     with THREADS_LOCK:
         os.makedirs(threads_dir, exist_ok=True)
-        path = os.path.join(threads_dir, thread_id + ".json")
+        path = _thread_path(threads_dir, thread_id)
         title, archived = "", False
         if os.path.exists(path):                  # 保留已有标题（含用户重命名的）+ 归档状态
             try:
@@ -92,7 +107,10 @@ def _write_metadata(path, data, mtime):
 def rename_thread(threads_dir, thread_id, title):
     """给线程设置自定义标题。"""
     with THREADS_LOCK:
-        path = os.path.join(threads_dir, thread_id + ".json")
+        try:
+            path = _thread_path(threads_dir, thread_id)
+        except ValueError:
+            return False
         try:
             with open(path, "r", encoding="utf-8") as f:
                 d = json.load(f)
@@ -132,7 +150,10 @@ def retag_workspace(threads_dir, old, new):
 def set_archived(threads_dir, thread_id, archived):
     """归档/取消归档一条线程（收进侧栏底部的折叠区，不删数据）。"""
     with THREADS_LOCK:
-        path = os.path.join(threads_dir, thread_id + ".json")
+        try:
+            path = _thread_path(threads_dir, thread_id)
+        except ValueError:
+            return False
         try:
             with open(path, "r", encoding="utf-8") as f:
                 d = json.load(f)
@@ -148,14 +169,14 @@ def delete_thread(threads_dir, thread_id):
     """删除一条线程。"""
     with THREADS_LOCK:
         try:
-            os.remove(os.path.join(threads_dir, thread_id + ".json"))
+            os.remove(_thread_path(threads_dir, thread_id))
             return True
-        except OSError:
+        except (OSError, ValueError):
             return False
 
 
 def load_thread(threads_dir, thread_id):
-    with open(os.path.join(threads_dir, thread_id + ".json"), "r", encoding="utf-8") as f:
+    with open(_thread_path(threads_dir, thread_id), "r", encoding="utf-8") as f:
         return json.load(f)
 
 
