@@ -12,8 +12,8 @@
 - 真实 WebView 烟雾测试、日志扫描和正常关闭后的进程树验收已通过；
 - v0.1.1 MSI 已构建；管理安装、v0.1.0 → v0.1.1 真实升级、安装目录启动和卸载均通过，32 个非日志用户文件哈希保持不变；
 - v0.1.1-security 批次经 8 路对抗审查后修复三处（chatReducer 未知事件白屏、CORS 漏 X-Filename、Vite dev 认证断裂）并已提交，含真发消息的 WebView E2E 验证；
-- Windows CI 已就位：`.github/workflows/ci.yml`（push/PR：Python/Node/Rust/Staging/卫生检查）与 `msi-smoke.yml`（手动触发：sidecar 冻结 → 内置运行时重建 → MSI 构建 → 安装/启动/卸载烟雾）；
-- CI 首绿前置条件：先推两个 MCP 仓（本地已变基到洗净历史上，各余 2/4 个新提交待推），再推 prism-motif——主仓集成测试依赖 origin 上的 `transcribe_melody`；
+- Windows CI 已首绿（2026-07-11）：`ci.yml` 在干净 runner 复现全套验证；`msi-smoke.yml` 完整安装链通过——冻结 sidecar、NuGet 3.10.11 重建内置 CPython、MSI 构建、静默安装、启动确认 Gateway 子进程、收口零残留、静默卸载（注意：安装的主程序是 `app.exe`，productName 只用于目录/快捷方式名，v0.2 Phase 5 再改 mainBinaryName）；
+- 三仓均已推送（两个 MCP 仓先变基到洗净历史再推，fast-forward）；
 - 当前 Git 分支：`agent/v0-2-hardening`；
 - reaper-mcp 存在用户原有的未跟踪 `TOOL_COVERAGE.md`，不得覆盖或删除。
 
@@ -26,8 +26,8 @@
 
 ## 当前施工顺序
 
-1. 推送两个 MCP 仓与 prism-motif，让 CI 首绿；手动 dispatch `MSI Smoke` 拿到干净主机安装证据（ROADMAP 施工入口 15）；
-2. 完成 Phase 2 的 20 回合 Soak Test 与稳定性门禁（Fake Provider/MCP 与前端 reducer 已落地）；
+1. 完成 Phase 2 的 20 回合 Soak Test 与稳定性门禁（Fake Provider/MCP 与前端 reducer 已落地）；
+2. 决定 `agent/v0-2-hardening` 合回 `main` 的时机（合并后 `MSI Smoke` 可直接 workflow_dispatch）；
 3. 按 `ROADMAP_V0.2.md` 继续 Phase 3–5。
 
 ## 必跑验证
