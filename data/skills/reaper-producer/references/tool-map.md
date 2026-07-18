@@ -35,9 +35,21 @@ Preferred flow for a new MIDI part:
 3. `add_midi_notes(track_index, item_index, notes)`.
 4. `get_midi_notes(track_index, item_index)` if verification is needed.
 
-Use beat-based timing. Keep clips aligned to bar boundaries unless the user asks for loose timing.
+Editing existing notes — pick by scale of change:
 
-If a requested edit requires clearing or replacing an item and there is no safe high-level tool, state the plan and ask confirmation before using `run_lua`.
+- `update_midi_note(track_index, item_index, note_index, ...)`: change one
+  note's pitch/timing/velocity in place. Note indices come from
+  `get_midi_notes` and may shift after any edit (notes re-sort by time) —
+  always re-read before another index-based edit.
+- `delete_midi_notes(track_index, item_index, note_indices)`: remove specific
+  notes. One undo step; the response echoes what was deleted.
+- `replace_midi_notes(track_index, item_index, notes)`: atomically rewrite
+  the whole item (delete all + insert the new set, one undo step). Use for
+  pitch correction and bulk rewrites.
+- `add_midi_notes` APPENDS only — never use it to "overwrite": appending a
+  corrected copy leaves the old notes in place and doubles the part.
+
+Use beat-based timing. Keep clips aligned to bar boundaries unless the user asks for loose timing.
 
 ## FX Operations
 

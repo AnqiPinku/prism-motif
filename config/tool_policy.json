@@ -18,6 +18,10 @@
     "update_track": "write",
     "create_midi_item": "write",
     "add_midi_notes": "write",
+    "update_midi_note": "write",
+
+    "delete_midi_notes": "destructive",
+    "replace_midi_notes": "destructive",
     "add_track_fx": "write",
     "set_fx_preset": "write",
     "set_fx_param": "write",
