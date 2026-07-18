@@ -9,7 +9,7 @@ description: 当用户说"混音听起来浑/糊/刺/闷/薄/响度不够/低频
 # Mix Diagnostics — 测量→定位→处方→复测
 
 ## When to use
-用户送来一段成品/半成品音频(或 REAPER 工程),想知道"这个 mix 有什么问题、怎么修"。默认动作先说给用户听,然后再执行,永远不采用"你觉得哪里不对?"这种反问。默认目标(流媒体投放):integrated LUFS -14 ±0.5(LUFS = Loudness Units Full Scale,一段音频的"感知平均响度",Spotify/Apple Music 都用这个基准),true peak -1.0 dBTP(dBTP = dB True Peak,重采样后的真实峰值,防爆红),LRA 4-8(LRA = Loudness Range,响度动态范围,单位 LU;流行歌 4-8,古典/电影 >10),人声轨 short-term -18~-16 LUFS,60-100Hz 段 RMS 不高于 -6 dBFS。
+用户送来一段成品/半成品音频(或 REAPER 工程),想知道"这个 mix 有什么问题、怎么修"。默认动作先说给用户听,然后再执行,永远不采用"你觉得哪里不对?"这种反问。默认目标(流媒体投放):integrated LUFS 落在发行策略区间(LUFS = Loudness Units Full Scale,一段音频的"感知平均响度";流媒体默认参考 -14,密度风格可到 -10 以下,策略表见 mastering-basics),true peak -1.0 dBTP(dBTP = dB True Peak,重采样后的真实峰值,防爆红),LRA 4-9(LRA = Loudness Range,响度动态范围,单位 LU;流行参考 4-9,古典/电影 >10),人声轨 short-term -18~-16 LUFS,低频(bass 段)能量在 analyze_audio 频段分布里不显著压过其他段。
 
 ## 第 0 步:不问,直接跑三件事
 用户丢音频/工程过来,立刻开这句:"先渲染整段,30 秒内给你三行结论——响度差多少 dB、谱心偏哪边、AI 主观贴标。看完再决定第一刀切哪。"然后执行:
@@ -34,11 +34,11 @@ description: 当用户说"混音听起来浑/糊/刺/闷/薄/响度不够/低频
 | muddy / 糊 / 浑 | 200-400Hz 能量高,谱心 <1.2 kHz | Bass/Kick/吉他低频堆积 | Bass 高通 40Hz(12dB/oct),200-300Hz bell -3dB Q=1.4;吉他 200Hz 以下 shelf -4dB |
 | boxy / 纸箱声 | 400-800Hz 凸起 | 房间录音染色 / 廉价话筒 | 人声 500Hz bell -2~-3dB Q=1.8 |
 | harsh / 刺 / 尖 | 谱心 >4kHz,2-5kHz 峰 | Cymbal/合成器/失真吉他过亮 | 2.5-3.5 kHz bell -2dB Q=2;整轨 ReaEQ tilt 高频 -1dB |
-| sibilant / 齿音重 | 5-9 kHz 瞬态尖峰 | 人声 S/T 过强 | ReaXComp split mode 5-9kHz,threshold -18dB,ratio 4:1 |
+| sibilant / 齿音重 | 5-9 kHz 瞬态尖峰 | 人声 S/T 过强 | ReaXComp split mode 5-9kHz,threshold 从 -18dB 起调(只在 S/T 触发为准),ratio 4:1 |
 | vocal buried / 人声埋没 | 人声 LUFS 比伴奏低 >4dB | 缺侧链 / 缺中频推进 | 人声 3kHz bell +2dB Q=1.5;伴奏 bus 2-4kHz 侧链 duck -2dB |
 | 无力 / 薄 | 60-120Hz 能量 <-12dB | Kick/Bass 基频缺失 | Kick 60Hz bell +3dB Q=2;Bass 80-100Hz shelf +2dB |
-| 响度不够 | integrated LUFS < -16 | mastering 缺压 | mix bus:ReaComp 4:1 threshold -12 gain +3;末端 LoudMax ceiling -1.0 dBTP,threshold 每次降 1dB 复测,直到 integrated -14 ±0.5 |
-| 立体声塌陷 | LR correlation >0.9(左右声道相似度) | 全部单声道乐器 | 吉他双录 pan L60/R60;pad 用 ReaSurroundPan 宽度 130 |
+| 响度不够 | integrated LUFS < -16 | mastering 缺压 | mix bus:ReaComp 4:1 threshold -12 gain +3;末端 LoudMax ceiling -1.0 dBTP,threshold 每次降 1dB 复测,直到 integrated 进入目标区间(默认 -14) |
+| 立体声塌陷 | 左右声道几乎一样(相关度工具测不了,靠听或看波形) | 全部单声道乐器 | 吉他双录 pan L60/R60;pad 用 ReaSurroundPan 宽度 130 |
 
 ## 第 1 刀之后:强制复测(硬规矩)
 改一个参数就再跑 `render_to_wav → measure_loudness → analyze_audio`。判断标准:
@@ -52,7 +52,7 @@ description: 当用户说"混音听起来浑/糊/刺/闷/薄/响度不够/低频
 
 1. `add_track_fx(track_index=<mix bus 轨>, fx_name="ReaEQ")` — high-pass 30Hz(切掉次声,人耳听不到只吃动态余量),shelf 10kHz +1dB("空气感")。
 2. `add_track_fx(track_index=<mix bus 轨>, fx_name="ReaComp")` — ratio 2:1、threshold -18、attack 30ms、release 100ms、gain +2 —— 目标 1-2dB gain reduction 做胶水,超过 3dB 就是过压,回滚。
-3. `add_track_fx(track_index=<mix bus 轨>, fx_name="LoudMax")` 或 `ReaLimit` — ceiling -1.0 dBTP,threshold 每次降 1dB 复测 integrated LUFS,直到 -14 ±0.5 停手,超过就爆。
+3. `add_track_fx(track_index=<mix bus 轨>, fx_name="LoudMax")` 或 `ReaLimit` — ceiling -1.0 dBTP,threshold 每次降 1dB 复测 integrated LUFS,到目标响度停手(默认 -14),超过就爆。
 
 每步用 `render_to_wav(out_path="master_bus_comp_2to1_thr-18.wav")` 显式命名,方便 A/B 对比。
 
