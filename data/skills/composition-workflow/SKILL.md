@@ -54,9 +54,9 @@ description: 开头动作集：当用户带着模糊意图来写歌（"想写一
 用户反馈 → 一次改一件事，重渲染：
 
 - **太快** → BPM -8（REAPER 主控 tempo 改，不动 MIDI），`render_to_wav` v2
-- **太暗** → 换 **平行大调**（相同主音的大调，A minor → A major，把 C→C#、F→F#、G→G#）；用 `get_midi_notes` 读回旋律轨，改三个音的 pitch，`add_midi_notes` 覆盖；`add_marker` v2
-- **不够抓耳** → `get_midi_notes` 读主旋律，把第 2 小节强拍（beat 1）的音改成整段最高音（比如 E5 改成 G5），并把它前一个音改成低 5 度制造跳进；`add_midi_notes` 覆盖
-- **太"套路"** → 把进行第 3 个和弦（C）替换为 **secondary dominant**（次属和弦 = 临时把下一个和弦当主音，为它写它自己的属和弦；C 的下一个是 G，G 的属和弦是 D7，所以把 C 换成 D7 = D3+F#3+A3+C4）；用 `add_midi_notes` 覆盖轨 1 小节 3
+- **太暗** → 换 **平行大调**（相同主音的大调，A minor → A major，把 C→C#、F→F#、G→G#）；用 `get_midi_notes` 读回旋律轨，改三个音的 pitch 后 `replace_midi_notes` 整体替换（`add_midi_notes` 是追加，会和旧音叠成双份）；`add_marker` v2
+- **不够抓耳** → `get_midi_notes` 读主旋律，把第 2 小节强拍（beat 1）的音改成整段最高音（比如 E5 改成 G5），并把它前一个音改成低 5 度制造跳进；只动两个音可直接 `update_midi_note` 逐音改，改动多就 `replace_midi_notes`
+- **太"套路"** → 把进行第 3 个和弦（C）替换为 **secondary dominant**（次属和弦 = 临时把下一个和弦当主音，为它写它自己的属和弦；C 的下一个是 G，G 的属和弦是 D7，所以把 C 换成 D7 = D3+F#3+A3+C4）；`get_midi_notes` 读回和声轨、改小节 3 的和弦音后 `replace_midi_notes`
 
 每次改完 `add_marker` 打 v2/v3/v4，`render_to_wav` 让用户对比。**不要一次改三个参数，用户没法说清是哪个改动奏效**。
 

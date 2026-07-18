@@ -70,7 +70,7 @@ Verse 与 Chorus 差值 <3dB 就必须动手。目标 4-6dB。
 - **Snare 主歌**:velocity 85-95
 - **Snare 副歌**:velocity 110-120
 
-用 `add_midi_notes` 重写鼓 MIDI 时,每一层的力度都必须明确落到具体数字。
+重写现有鼓 MIDI 力度用 `replace_midi_notes`(读出→改 velocity→整体替换,一个 undo 步;`add_midi_notes` 是追加,会把整套鼓叠成双份);只调几个音就 `update_midi_note` 逐音改。无论哪种,每一层的力度都必须明确落到具体数字。
 
 ## 第五步:自动化 — 三条最省事的 envelope
 

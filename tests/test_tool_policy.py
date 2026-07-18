@@ -75,6 +75,13 @@ class ToolPolicyTests(unittest.TestCase):
         self.assertEqual(policy.risk_for("reaper_status", {}), "read")
         self.assertEqual(policy.risk_for("delete_track", {"index": 0}), "destructive")
         self.assertEqual(policy.risk_for("run_lua", {"code": "return 1"}), "execute")
+        # MIDI 原子修改（Phase 3.1）：逐音改=write；删除与整体替换=destructive，
+        # 信任模式不得放行
+        self.assertEqual(policy.risk_for("update_midi_note", {"note_index": 1}), "write")
+        self.assertEqual(policy.risk_for("delete_midi_notes", {"note_indices": [1]}),
+                         "destructive")
+        self.assertEqual(policy.risk_for("replace_midi_notes", {"notes": []}),
+                         "destructive")
         self.assertEqual(
             policy.risk_for("transport", {"action": "record"}),
             "record",
