@@ -17,7 +17,7 @@ description: 当用户需要决定"这首歌放几轨、每轨用什么乐器、
 - **track budget(轨道预算)**:一首歌能同时响的音色数上限。Pop/Rock 8–16 轨够;Cinematic 30+;Lo-fi 4–6。轨越多越难混。
 - **HPF (High-Pass Filter, 高通滤波)**:砍掉某频率以下的所有低频。"HPF 80Hz" = 80Hz 以下全砍。
 - **sidechain(侧链压缩)**:让 A 轨触发压缩器,把 B 轨在 A 响的瞬间压低几 dB。EDM 常用:kick 一响,pad 就短暂让位,律动更 pump。
-- **swing / shuffle(摇摆量)**:把偶数位 16 分音符往后推的百分比。50% = 平直,55–60% = 有摇摆感,65%+ = 明显 shuffle。
+- **swing / shuffle(摇摆量)**:把偶数位 16 分音符往后推。MPC 风格比例通常以 50% 表示平直；REAPER 的 Swing amount 以 0 表示平直,官方 API 暴露 -1..1 的独立量程。两者分母不同,不能把数值直接复制或声称存在官方精确换算。来源:[REAPER GetSetProjectGrid API](https://www.reaper.fm/sdk/reascript/reascripthelp.html#GetSetProjectGrid)。
 - **bus 分组**:多个轨道汇总到一条 bus 轨统一处理(如 4 层 strings 汇到 Strings bus 再加 EQ/reverb)。
 - **Cutoff / Resonance**:合成器低通截止频率 / 截止点的峰凸出量。Cutoff 800Hz = 只让 800Hz 以下过;Resonance 高了会"嗡"。
 - **ADSR(Attack/Decay/Sustain/Release)**:音头快慢 / 衰减到持续的时间 / 持续音量 / 松开后余音时间。单位 ms 或 0–1。
@@ -44,7 +44,7 @@ description: 当用户需要决定"这首歌放几轨、每轨用什么乐器、
 风格切换只改"多加什么"和"删什么",6 轨骨架不动。
 
 - **Pop**:+ Vocal double(主 vocal 录两遍,复制轨 pan L30/R30)、+ Piano 高八度 layer(和 pad 同和弦、高一个八度)。
-- **Lo-fi Hip-hop**:删 Pad → 换 Rhodes 电钢;Hat 用 swing 58%(MPC 口径,50%=平直;REAPER 的 Grid Swing 以 0%=平直计,等效约 +16%——别直接拉 0.58,那是重 shuffle);全体加一条 bus,ReaEQ 12kHz 以上 lowpass 砍 -12dB/oct 制造"闷"感。
+- **Lo-fi Hip-hop**:删 Pad → 换 Rhodes 电钢;Hat 以 MPC 风格 58% 作为目标 feel 时,在 REAPER 启用 Swing 后从轻到中等量开始,看偶数位 16 分音符的位置并 A/B 调到相同律动。不要输入 0.58,也不要把推导值写成跨软件精确等价；全体加一条 bus,ReaEQ 12kHz 以上 lowpass 砍 -12dB/oct 制造"闷"感。
 - **EDM/House**:+ sidechain pad(Track FX 加 ReaComp,Detector input 指向 kick 送来的信号,Threshold 触发时压 6dB, Release 200ms)、+ Riser 8 小节爬升音效。Bass 拆两轨:sub sine(ReaSynth Sine, HPF 关, LPF 80Hz)+ mid bass(80–250Hz)。
 - **Cinematic/Orchestra**:Strings 分 4 层(Bass/Cello/Viola/Violin, pan L60/L20/R20/R60),Brass 单独一轨占 200Hz–2kHz。轨数放到 20+,靠 bus 分组管理(Strings bus / Brass bus / Perc bus 各一条)。
 - **Rock**:+ Rhythm guitar L/R 各一轨 double(pan L80/R80,不同 take 录音自然错开)、+ Lead guitar center。Bass 用 DI+cab 模拟。

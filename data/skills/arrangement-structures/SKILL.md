@@ -12,11 +12,11 @@ description: 当用户要"搭骨架/定曲式/排段落/加 marker/写 arrangeme
 当你已经有一段 loop、一个动机、或一组和弦,但不知道怎么把它扩成一首 2–4 分钟的完整曲子——这个 skill 直接给模板。不要问"你想要什么风格",按用户提到的类型词(pop / lo-fi / EDM / ambient / ballad)套下面对应模板,用 `add_marker` 一次性把段落标签打进 REAPER 时间线,再谈局部改动。默认 BPM 已给,不合适用户 30 秒会告诉你改。
 
 ## 通用能量曲线原则(名词先释义)
-**能量(energy)** — 一段音乐给耳朵的"响度+密度+频宽"综合印象,用 [0, 1] 区间标记相对值。由三个可测量因子合计:密度(同时发声的元素数量)、动态(短时 LUFS)、频宽(20Hz–20kHz 内各频段是否都有能量)。
+**能量规划分数(energy plan score)** — 下表的 [0, 1] 数值只是 **creative_default** 编曲草图,不是工具输出、心理声学量或可跨歌曲比较的测量值。0 表示近乎静音/只剩尾音,0.25 表示 1–2 个稀疏层,0.5 表示核心节奏与和声已在,0.75 表示大部分主层进入,1.0 表示本曲计划中的峰值。它只用于检查同一首歌的段落曲线是否有起伏;实际结果必须用发声层数、片段 integrated LUFS、频谱分布和 A/B 试听分别验证。
 
 **hook** — 最容易被记住的那一段(通常是 chorus 的主旋律或 drop),要求听众第一次听就能哼。
 
-流媒体听众切歌很快——pop/EDM 语境下第一个 hook 必须在 **0:30–0:45** 出现(ballad 铺垫可以更长,ambient 无 hook,见各模板)。段落之间的能量差 ≥ 0.15 才有"进段"感;差 < 0.05 听众感知不到。骨架搭完后,用 `render_to_wav` 渲染前 60 秒 → `measure_loudness` 检查 chorus vs verse 的短时 LUFS 差 ≥ 3 dB,不到就说明能量分层没做出来。
+**creative_default**:pop/EDM 可先把第一个 hook 放在 **0:30–0:45**；ballad 可以铺垫更长,ambient 可以没有 hook,参考曲或用户意图优先。不要把能量规划分数的差值解释成听觉阈值。骨架搭完后,分别渲染 verse 与 chorus,比较片段 integrated LUFS、活跃层数和频谱,再做响度匹配 A/B；约 3 dB 的段落响度差只能作为 **heuristic** 起点,不是“进段感成立”的硬门槛。
 
 ## Template 1 — Pop verse-chorus(默认 3:20,90 BPM,4/4)
 段落与 marker(用 `add_marker` 打在这些拍位,name 就用 `Marker name` 列的字符串):
@@ -39,7 +39,7 @@ description: 当用户要"搭骨架/定曲式/排段落/加 marker/写 arrangeme
 ## Template 2 — Lo-fi 循环体(默认 2:40,72 BPM,4/4)
 **Lo-fi** — 低保真美学,用 vinyl noise、tape wow/flutter、Rhodes 电钢制造"下午三点昏昏欲睡"的氛围;不靠戏剧对比,靠"元素慢慢进、慢慢出"制造弧线。8 小节为一"页"。
 
-- 页 A(bar 1–8) `LOOP_A` — 只有 drum(hihat swing 55%)+ Rhodes 主和弦,能量 0.4
+- 页 A(bar 1–8) `LOOP_A` — 只有 drum(hihat 以 MPC 风格 55% 为目标 feel；在 REAPER 里按网格与 A/B 匹配,不直接复制数值)+ Rhodes 主和弦,能量 0.4
 - 页 B(bar 9–16) `LOOP_B_BASS` — 加 bass(sub + 低频泛音,高通 45Hz),能量 0.55
 - 页 C(bar 17–24) `LOOP_C_MELODY` — 加主旋律 lead(saxophone 或 Rhodes 独奏,音量 -6 dB 相对 loop A),能量 0.7
 - 页 D(bar 25–32) `LOOP_D_FULL` — 全员+vinyl noise 抬 2 dB,能量 0.8
@@ -107,4 +107,4 @@ description: 当用户要"搭骨架/定曲式/排段落/加 marker/写 arrangeme
 - **不打 marker 就开始编曲**——没有可视时间轴,后面加减段落对不齐,鼓型也会飘;永远先 `add_marker` 后 `add_midi_notes`。
 - **EDM drop 不留 gap**——buildup 末尾直接接 drop 会糊,至少留 1/2 拍全静音。
 - **Ambient 硬套 verse-chorus 命名**——ambient 没有段落切分,只有频谱缓变,别标 `V1/CHORUS`,标 `LAYER_MID/PEAK/RECEDE`。
-- **骨架没渲染就开始调音色**——搭完 marker 立刻 `render_to_wav` 前 60 秒过一遍,用 `measure_loudness` 验证 chorus/verse LUFS 差 ≥ 3 dB;差不够就是能量分层没成立。
+- **骨架没渲染就开始调音色**——搭完 marker 后分别渲染 verse 与 chorus,检查活跃层数、片段 integrated LUFS 和频谱,再做响度匹配 A/B。不要用能量规划分数或单一 3 dB 阈值代替听感判断。
