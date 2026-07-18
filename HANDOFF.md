@@ -36,6 +36,7 @@ python test_core.py
 python -m unittest discover -s tests -v
 python tests\soak_test.py
 python tests\check_repo_hygiene.py
+python tests\check_tool_contracts.py
 npm --prefix frontend run lint
 npm --prefix frontend run test
 npm --prefix frontend run build

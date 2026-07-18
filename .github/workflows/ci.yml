@@ -85,3 +85,6 @@ jobs:
 
       - name: Repository hygiene
         run: python tests/check_repo_hygiene.py
+
+      - name: Tool contract check (Phase 3.2)
+        run: python tests/check_tool_contracts.py

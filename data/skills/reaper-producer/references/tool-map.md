@@ -31,7 +31,7 @@ For edits, always resolve the current track index from the current state by trac
 Preferred flow for a new MIDI part:
 
 1. Resolve track index by name.
-2. `create_midi_item(track_index, start_beat, length_beats)`.
+2. `create_midi_item(track_index, start_beats, length_beats)`.
 3. `add_midi_notes(track_index, item_index, notes)`.
 4. `get_midi_notes(track_index, item_index)` if verification is needed.
 
@@ -58,7 +58,7 @@ Preferred flow:
 1. `list_track_fx(track_index)`.
 2. `add_track_fx(track_index, fx_name)` if missing.
 3. `get_fx_params(track_index, fx_index)` to discover parameter names/indices.
-4. `set_fx_param(track_index, fx_index, param_index, value)` for targeted changes.
+4. `set_fx_param(track_index, fx_index, param, value)` for targeted changes.
 
 For stock REAPER plugins, prefer:
 

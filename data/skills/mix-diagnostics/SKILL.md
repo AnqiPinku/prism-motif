@@ -17,7 +17,7 @@ description: 当用户说"混音听起来浑/糊/刺/闷/薄/响度不够/低频
 1. `render_to_wav(out_path=None)` — 省略路径会自动落 `%TEMP%/prism-renders/`,不污染工程。
 2. `measure_loudness(path)` — 拿三个数:integrated LUFS、true peak(dBTP)、LRA。
 3. `analyze_audio(path)` — 拿 spectral centroid(谱心,单位 Hz,人声流行歌 1.5-3 kHz 正常,>4 kHz 偏刺、<1.2 kHz 偏闷。可以理解成"频谱重心的位置")、tempo、key、频段能量分布。
-4. `listen_subjective(path, focus="mix problems")` — Gemini 给带时间戳的标签:`0:34 muddy 200Hz` / `1:12 sibilant 7kHz` / `vocal buried -3dB`。
+4. `listen_subjective(path, question="mix problems")` — Gemini 给带时间戳的标签:`0:34 muddy 200Hz` / `1:12 sibilant 7kHz` / `vocal buried -3dB`。
 
 ## 术语速查(第一次出现即用)
 - **stem** = 分组导出的一路音频(vocal stem、drum stem),不是单轨也不是最终成品。
@@ -48,9 +48,11 @@ description: 当用户说"混音听起来浑/糊/刺/闷/薄/响度不够/低频
 
 ## Bus 处理默认起点(不是终点)
 用户没有 mix bus 处理时,先塞这一串,每步渲染留档:
-1. `add_track_fx(master, "ReaEQ")` — high-pass 30Hz(切掉次声,人耳听不到只吃动态余量),shelf 10kHz +1dB("空气感")。
-2. `add_track_fx(master, "ReaComp")` — ratio 2:1、threshold -18、attack 30ms、release 100ms、gain +2 —— 目标 1-2dB gain reduction 做胶水,超过 3dB 就是过压,回滚。
-3. `add_track_fx(master, "LoudMax")` 或 `ReaLimit` — ceiling -1.0 dBTP,threshold 每次降 1dB 复测 integrated LUFS,直到 -14 ±0.5 停手,超过就爆。
+先 `list_tracks` 找到 mix bus 轨(常叫 "Mix Bus"/"Bus");REAPER 的 master 总线本身工具不可寻址,真要挂 master 需 `run_lua`(GetMasterTrack)或让用户手动。
+
+1. `add_track_fx(track_index=<mix bus 轨>, fx_name="ReaEQ")` — high-pass 30Hz(切掉次声,人耳听不到只吃动态余量),shelf 10kHz +1dB("空气感")。
+2. `add_track_fx(track_index=<mix bus 轨>, fx_name="ReaComp")` — ratio 2:1、threshold -18、attack 30ms、release 100ms、gain +2 —— 目标 1-2dB gain reduction 做胶水,超过 3dB 就是过压,回滚。
+3. `add_track_fx(track_index=<mix bus 轨>, fx_name="LoudMax")` 或 `ReaLimit` — ceiling -1.0 dBTP,threshold 每次降 1dB 复测 integrated LUFS,直到 -14 ±0.5 停手,超过就爆。
 
 每步用 `render_to_wav(out_path="master_bus_comp_2to1_thr-18.wav")` 显式命名,方便 A/B 对比。
 
