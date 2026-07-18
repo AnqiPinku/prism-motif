@@ -15,6 +15,7 @@ class FakeProvider:
     def __init__(self):
         self.requests = []
         self.counts = Counter()
+        self.client_disconnects = 0
         self.httpd = None
         self.thread = None
 
@@ -41,7 +42,13 @@ class FakeProvider:
                 if model == "down":
                     return self._json({"error": {"message": "provider down"}}, 503)
                 if payload.get("stream"):
-                    return self._stream(model)
+                    try:
+                        return self._stream(model)
+                    except (BrokenPipeError, ConnectionAbortedError, ConnectionResetError):
+                        # Soak 的 cancel 场景会在首个 delta 后主动关闭客户端连接。
+                        # 这是测试输入，不应让 ThreadingHTTPServer 打印误导性的异常堆栈。
+                        owner.client_disconnects += 1
+                        return None
                 if model == "tool":
                     return self._json({
                         "choices": [{"message": {"tool_calls": [{
