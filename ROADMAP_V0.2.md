@@ -303,9 +303,12 @@ tests/
 - [x] Pitch Correction 不再调用只追加的 add_midi_notes 做替换（composition-workflow、
       tension-design 同类误导表述一并清除）；
 - [x] 写操作返回 before/after 摘要；
-- [ ] 验证无重复音符、错轨和属性污染（离线已验：13 项 server 自测 + 19 项内嵌 Lua
-      运行时行为仿真——校验前置/undo 配对/降序删除/muted 保真；**真机 REAPER 验收
-      待做**：开 REAPER 后桥自动加载新代码，跑一轮真实 get→replace→undo 即可勾）。
+- [x] 验证无重复音符、错轨和属性污染（2026-07-12 真机 REAPER 验收 20/20：写音/逐音改/
+      删除/替换/muted 保真/坏参数攻击零数据丢失/小数索引攻击无误删/单步 undo 精确回退/
+      清理零残留。真机另抓到并修复一个离线测不出的坑：Undo_Begin/EndBlock2 对纯 MIDI
+      修改不生成撤销点，须用 Undo_OnStateChange_Item——一步 undo 曾连带撤掉整条轨）。
+
+Phase 3.1 完成。离线证据：13 项 server 自测 + 19 项内嵌 Lua 运行时行为仿真。
 
 ### 3.2 工具契约
 
