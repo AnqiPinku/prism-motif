@@ -83,7 +83,7 @@ You can now *hear* the project, not just read its state. Use this whenever a req
    Keep outputs under `data/tmp/`. This is low-risk (throwaway file, no project change).
 2. **Analyze** that path: `analyze_audio(path)` → integrated LUFS, loudness range, true peak (dBTP), tempo, key, 6-band spectral balance, clipping timestamps. Or `measure_loudness(path)` for a fast loudness-only check against a target (e.g. −14 LUFS). Both are read-only.
 3. **Decide from the numbers**, not a guess:
-   - integrated LUFS under target → raise master/track gain by the gap.
+   - integrated LUFS under target → raise master/track gain by the gap; if a limiter sits on the master the mapping isn't 1:1 — let the re-measure step converge it.
    - true peak above the ceiling (e.g. > −1 dBTP) → lower the limiter ceiling / output gain.
    - clipping timestamps present → locate and tame the offending peak.
    - one spectral band hot vs the rest (e.g. `low_mid`) → targeted EQ cut there (exact band targeting: `references/reaeq.md`).

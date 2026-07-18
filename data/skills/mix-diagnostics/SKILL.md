@@ -64,6 +64,6 @@ description: 当用户说"混音听起来浑/糊/刺/闷/薄/响度不够/低频
 - **只信主观、不信 LUFS**:耳朵疲劳后 3dB 差异都听不出,`measure_loudness` 不会骗人。
 - **只信 LUFS、不信主观**:-14 LUFS 达标但 Gemini 报 `1:20 harsh 3kHz`,照修不误。
 - **工程目录里堆 render**:`out_path=None` 自动落 %TEMP%,让 harness 清理,不要手动挑目录。
-- **master bus 上做 >3dB gain reduction**:70% 的"响度不够"是 Kick/Bass stem 冲突,不是 bus 压得不够狠。先回 stem 层解决。
+- **master bus 上做 >3dB gain reduction**:"响度不够"多半是 Kick/Bass stem 冲突,不是 bus 压得不够狠。先回 stem 层解决。
 - **说"调 EQ 让 Bass 更清晰"**:必须写 `Bass 200Hz bell -3dB Q=1.4, 80Hz shelf +2dB`。没数字等于没说。
 - **用户没投诉就主动上 limiter**:demo 阶段留 6dB headroom,limiter 是 mastering 最后一步,不是 mix 阶段的补丁。

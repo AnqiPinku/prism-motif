@@ -14,7 +14,7 @@ description: 编曲能量曲线设计:控制歌曲从头到尾的张力起伏、
 
 ## 第一步:先量当前的能量曲线(不猜)
 
-**tension→release — 张力→释放**:副歌的"炸"不来自副歌本身多响,而来自副歌前那段有多空。人耳判定"一样满"的阈值是 3dB 短时 LUFS 差以内。
+**tension→release — 张力→释放**:副歌的"炸"不来自副歌本身多响,而来自副歌前那段有多空。人耳判定"一样满"的经验阈值是 3dB 短时 LUFS 差以内。
 
 打开项目,用 `set_time_selection` 圈出每段,`measure_loudness` 逐段测短时 LUFS(不要测整首 integrated):
 
@@ -56,7 +56,7 @@ Verse 与 Chorus 差值 <3dB 就必须动手。目标 4-6dB。
 - **拍 7 反拍到拍 8 结束**:**全部乐器静音 200ms**,只留 reverb tail
 - **副歌第 1 拍(downbeat)**:Kick + Crash + Bass + 全和声同时进,MIDI velocity=127
 
-**negative space — 负空间/留白**:drop 前 100-300ms 的绝对静音,大脑用这 200ms 校准听觉基准,副歌一进来的对比度直接翻倍,等于免费 3dB 冲击力。90% 的"drop 无力"是漏了这 200ms。
+**negative space — 负空间/留白**:drop 前 100-300ms 的绝对静音,大脑用这 200ms 校准听觉基准,副歌一进来的对比度直接拉开,冲击力等于白赚。大多数"drop 无力"都是漏了这 200ms。
 
 ## 第四步:velocity 力度阶梯(MIDI 层面)
 
@@ -74,7 +74,7 @@ Verse 与 Chorus 差值 <3dB 就必须动手。目标 4-6dB。
 
 ## 第五步:自动化 — 三条最省事的 envelope
 
-在 REAPER 里给这三个参数画自动化,能撑起 60% 的动态感:
+在 REAPER 里给这三个参数画自动化,能撑起大半的动态感:
 
 1. **主 bus 音量**:Verse -3dB,Pre-chorus -1dB,Chorus 0dB(是靠 arrangement level 拉差,不是靠 mix compressor 事后追)
 2. **Reverb send 量**:Verse 25%(远),Bridge 40-50%(飘),Chorus 15%(**punch — 冲击感,近而干才有拳头感**,只加短 plate 0.8-1.5s + pre-delay 20-40ms,不做大 hall)
@@ -87,5 +87,5 @@ Verse 与 Chorus 差值 <3dB 就必须动手。目标 4-6dB。
 - **副歌用大 hall reverb**:副歌要 punch,大 hall(2s+)让它糊。副歌只用短 plate 0.8-1.5s、pre-delay 20-40ms;长 reverb 留给 verse 和 bridge。
 - **减轨只减 1-2 小节**:bridge 想做空却只砍 2 拍就回,耳朵还没 reset 就又满了。最少 4 小节,最好 8 小节。
 - **Final chorus 和第一遍一样**:观众第二次听副歌已经"知道了",必须加 2-3 轨新元素(ad-lib、strings 高八度、tambourine)否则感觉在倒带。
-- **忘了 negative space**:副歌 downbeat 前那 100-300ms 静音是免费的 3dB 冲击力,漏掉就是浪费。
+- **忘了 negative space**:副歌 downbeat 前那 100-300ms 静音是免费的冲击力,漏掉就是浪费。
 - **对和声乐器做 pitch rise**:build-up 的 +12 semitone 扫频只能加在 riser/FX 层,加到 pad/piano 上就是整首走调不是编曲手法。

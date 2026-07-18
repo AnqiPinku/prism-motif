@@ -16,7 +16,7 @@ description: 当用户要"搭骨架/定曲式/排段落/加 marker/写 arrangeme
 
 **hook** — 最容易被记住的那一段(通常是 chorus 的主旋律或 drop),要求听众第一次听就能哼。
 
-听众 90 秒后开始走神——第一个 hook 必须在 **0:30–0:45** 出现。段落之间的能量差 ≥ 0.15 才有"进段"感;差 < 0.05 听众感知不到。骨架搭完后,用 `render_to_wav` 渲染前 60 秒 → `measure_loudness` 检查 chorus vs verse 的短时 LUFS 差 ≥ 3 dB,不到就说明能量分层没做出来。
+流媒体听众切歌很快——pop/EDM 语境下第一个 hook 必须在 **0:30–0:45** 出现(ballad 铺垫可以更长,ambient 无 hook,见各模板)。段落之间的能量差 ≥ 0.15 才有"进段"感;差 < 0.05 听众感知不到。骨架搭完后,用 `render_to_wav` 渲染前 60 秒 → `measure_loudness` 检查 chorus vs verse 的短时 LUFS 差 ≥ 3 dB,不到就说明能量分层没做出来。
 
 ## Template 1 — Pop verse-chorus(默认 3:20,90 BPM,4/4)
 段落与 marker(用 `add_marker` 打在这些拍位,name 就用 `Marker name` 列的字符串):
@@ -34,7 +34,7 @@ description: 当用户要"搭骨架/定曲式/排段落/加 marker/写 arrangeme
 | Final Chorus | 8 | 53 | `CHORUS3` | 1.0 | 升半音 or 双倍鼓(2 层 kick 错开 8 分) |
 | Outro | 4 | 61 | `OUTRO` | 0.25 | 只剩 piano+vocal 尾音 |
 
-**首个 hook 在 0:34**(90 BPM 下 chorus1 起点第 17 小节 ≈ 34 秒),踩点。
+**首个 hook 在 0:43**(90 BPM 下 chorus1 起点第 17 小节 ≈ 43 秒),踩点。
 
 ## Template 2 — Lo-fi 循环体(默认 2:40,72 BPM,4/4)
 **Lo-fi** — 低保真美学,用 vinyl noise、tape wow/flutter、Rhodes 电钢制造"下午三点昏昏欲睡"的氛围;不靠戏剧对比,靠"元素慢慢进、慢慢出"制造弧线。8 小节为一"页"。
@@ -62,7 +62,7 @@ description: 当用户要"搭骨架/定曲式/排段落/加 marker/写 arrangeme
 | Drop 2 | 16 | `DROP2` | 变奏:和弦升半音 or 换鼓 pattern |
 | Outro | 8 | `OUTRO` | filter 关闭(cutoff 从 8kHz 扫回 200Hz),pad 独留 |
 
-用 `render_to_wav` 渲染 DROP1 8 拍 → `measure_loudness` 检查短时 LUFS,不到 -7 dB 就说明没炸出来,回去查 kick+bass 的层是否叠够。
+用 `render_to_wav` 渲染 DROP1 8 拍 → `measure_loudness` 检查短时 LUFS(前提:master 链已推到成品响度;粗排阶段绝对值不作数,改看与 BREAK1 的相对差),不到 -7 dB 就说明没炸出来,回去查 kick+bass 的层是否叠够。
 
 ## Template 4 — Ambient 长弧线(默认 5:00,自由拍)
 **Ambient** — 无明确节奏、无 hook,靠频谱和空间缓变制造氛围;不数小节,数"分钟标记"。
@@ -102,7 +102,7 @@ description: 当用户要"搭骨架/定曲式/排段落/加 marker/写 arrangeme
 
 ## Anti-patterns
 - **每段都 8 小节均匀切**——听众会睡着;pre-chorus 4 小节、bridge 变长或变短制造不对称才有推进感。
-- **hook 出现在 1 分钟之后**——大多数听众已经切下一首;首个记忆点必须 ≤ 0:45。
+- **hook 出现在 1 分钟之后**——流媒体听众切歌毫不留情;pop/EDM 的首个记忆点必须 ≤ 0:45(ballad/ambient 按各自模板走)。
 - **Bridge 加更多元素**——反了。Bridge 应该"减"元素(去鼓 or 去 bass),给最终 chorus 让路,能量曲线要有一次下沉。
 - **不打 marker 就开始编曲**——没有可视时间轴,后面加减段落对不齐,鼓型也会飘;永远先 `add_marker` 后 `add_midi_notes`。
 - **EDM drop 不留 gap**——buildup 末尾直接接 drop 会糊,至少留 1/2 拍全静音。
