@@ -15,7 +15,7 @@ README 面向用户，不作为内部任务清单。
 v0.1.1-security 的安全代码、CI、MSI 与升级/卸载验证已完成并合入 `main`；当前公开版本仍为 v0.1.0。现在按 `ROADMAP_V0.2.md` 收口 Phase 3：
 
 1. 完成 3.4 的真实制作人复核与 A/B/测量证据；
-2. 建立 3.5 Gold Task 固定工程、评分器和至少 30 项评测；
+2. 接通 3.5 Gold Task 的真实 Agent 运行驱动，用现有 6 个固定工程和 10 个任务定义跑出基线，再扩到至少 30 个唯一任务；
 3. 通过 Eval 门后再进入 Phase 4 结构重构；
 4. 最后执行 Phase 5 的元数据、许可证、文档和干净机发布验证。
 
@@ -99,6 +99,7 @@ python -m unittest discover -s tests -v
 python tests\soak_test.py
 python tests\check_repo_hygiene.py
 python tests\check_tool_contracts.py
+python -m tests.gold.runner verify
 npm --prefix frontend run lint
 npm --prefix frontend run test
 npm --prefix frontend run build

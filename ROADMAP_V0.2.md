@@ -371,6 +371,13 @@ mix-muddy.rpp
 melody-offkey.rpp
 ```
 
+- [x] 建立上述 6 个固定工程模板；混音素材在隔离运行目录确定性生成，不提交二进制音频；
+- [x] 6 个工程经真实 REAPER 逐个打开验证，轨道结构一致，两个 MIDI 工程分别读出 13 / 8 个音符；
+- [x] 建立首批 10 个唯一任务、证据 schema、隔离运行准备器、结构/测量评分器和发布门汇总；
+- [x] `mix-clipping` / `mix-muddy` 经真实 REAPER 渲染，再由 `music-perception-mcp` 完成基线测量；
+- [ ] 接入真实 Prism Motif Agent 运行驱动，自动采集前后快照、事件、许可和耗时证据；
+- [ ] 跑完首批 10 个真实任务并形成基线，再扩到至少 30 个唯一任务。
+
 指标：
 
 - Task Success Rate；
@@ -379,7 +386,6 @@ melody-offkey.rpp
 - Unauthorized Destructive Action Rate；
 - Tool Error Recovery Rate；
 - Before/After Measurement Validity；
-- Undoability；
 - 平均工具调用数和完成时间。
 
 ### v0.2 Eval 门
@@ -573,8 +579,8 @@ Phase 1 首批任务状态（历史，已完成并合入 `main`）：
 当前施工入口：
 
 1. [ ] 安排真实制作人复核关键 Skill；
-2. [ ] 建立 3.5 的 6 个固定 REAPER 工程与 Gold Task Harness；
-3. [ ] 先跑出 10 个可重复任务，再扩到至少 30 个并达到 v0.2 Eval 门；
+2. [x] 建立 3.5 的 6 个固定 REAPER 工程、首批 10 个任务定义与离线 Gold Task Harness；
+3. [ ] 接入真实 Agent 运行驱动，先跑出这 10 个任务的可重复基线，再扩到至少 30 个唯一任务并达到 v0.2 Eval 门；
 4. [ ] 用渲染、测量和响度匹配 A/B 关闭 3.4 最后一项；
 5. [ ] Eval 门通过后进入 Phase 4，随后执行 Phase 5 当前主线的完整发布验证。
 

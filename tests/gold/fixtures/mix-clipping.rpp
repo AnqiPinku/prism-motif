@@ -1,0 +1,30 @@
+<REAPER_PROJECT 0.1 "7.0/win64" 0
+  TEMPO 120 4 4
+  CURSOR 0
+  SELECTION 0 0
+  <TRACK {A3030303-0000-4000-8000-000000000001}
+    NAME "Mix Bus"
+    VOLPAN 1 0 -1 -1 1
+    MUTESOLO 0 0 0
+    NCHAN 2
+    TRACKID {A3030303-0000-4000-8000-000000000001}
+    MAINSEND 1 0
+    <ITEM
+      POSITION 0
+      LENGTH 4
+      LOOP 0
+      MUTE 0 0
+      SEL 0
+      IGUID {A3030303-0000-4000-8000-000000000002}
+      IID 1
+      NAME "Hard Clipped Reference"
+      VOLPAN 1 0 1 -1
+      SOFFS 0
+      PLAYRATE 1 1 0 -1 0 0.0025
+      GUID {A3030303-0000-4000-8000-000000000003}
+      <SOURCE WAVE
+        FILE "mix-clipping.wav" 1
+      >
+    >
+  >
+>
