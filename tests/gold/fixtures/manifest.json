@@ -1,0 +1,161 @@
+{
+  "schema_version": 1,
+  "fixtures": {
+    "empty.rpp": {
+      "snapshot": {
+        "project": "empty.rpp",
+        "tempo_bpm": 120,
+        "time_signature": [4, 4],
+        "tracks": [],
+        "markers": [],
+        "measurements": {}
+      },
+      "generated_audio": []
+    },
+    "chord-loop.rpp": {
+      "snapshot": {
+        "project": "chord-loop.rpp",
+        "tempo_bpm": 120,
+        "time_signature": [4, 4],
+        "tracks": [
+          {
+            "name": "Chords",
+            "volume_db": 0.0,
+            "pan": 0.0,
+            "mute": false,
+            "solo": false,
+            "fx": [],
+            "items": [
+              {
+                "type": "midi",
+                "position_beats": 0,
+                "length_beats": 16,
+                "notes": [
+                  {"pitch": 60, "start_beats": 0, "length_beats": 4, "velocity": 84, "channel": 0},
+                  {"pitch": 64, "start_beats": 0, "length_beats": 4, "velocity": 84, "channel": 0},
+                  {"pitch": 67, "start_beats": 0, "length_beats": 4, "velocity": 84, "channel": 0},
+                  {"pitch": 60, "start_beats": 4, "length_beats": 4, "velocity": 84, "channel": 0},
+                  {"pitch": 66, "start_beats": 4, "length_beats": 4, "velocity": 84, "channel": 0},
+                  {"pitch": 67, "start_beats": 4, "length_beats": 4, "velocity": 84, "channel": 0},
+                  {"pitch": 57, "start_beats": 8, "length_beats": 4, "velocity": 84, "channel": 0},
+                  {"pitch": 60, "start_beats": 8, "length_beats": 4, "velocity": 84, "channel": 0},
+                  {"pitch": 64, "start_beats": 8, "length_beats": 4, "velocity": 84, "channel": 0},
+                  {"pitch": 55, "start_beats": 12, "length_beats": 4, "velocity": 84, "channel": 0},
+                  {"pitch": 59, "start_beats": 12, "length_beats": 4, "velocity": 84, "channel": 0},
+                  {"pitch": 62, "start_beats": 12, "length_beats": 4, "velocity": 84, "channel": 0},
+                  {"pitch": 62, "start_beats": 12, "length_beats": 4, "velocity": 84, "channel": 0}
+                ]
+              }
+            ]
+          }
+        ],
+        "markers": [],
+        "measurements": {}
+      },
+      "generated_audio": []
+    },
+    "arrangement-flat.rpp": {
+      "snapshot": {
+        "project": "arrangement-flat.rpp",
+        "tempo_bpm": 110,
+        "time_signature": [4, 4],
+        "tracks": [
+          {"name": "Drums", "volume_db": 0.0, "pan": 0.0, "mute": false, "solo": false, "fx": [], "items": []},
+          {"name": "Bass", "volume_db": 0.0, "pan": 0.0, "mute": false, "solo": false, "fx": [], "items": []},
+          {"name": "Pad", "volume_db": 0.0, "pan": 0.0, "mute": false, "solo": false, "fx": [], "items": []}
+        ],
+        "markers": [],
+        "measurements": {}
+      },
+      "generated_audio": []
+    },
+    "mix-clipping.rpp": {
+      "snapshot": {
+        "project": "mix-clipping.rpp",
+        "tempo_bpm": 120,
+        "time_signature": [4, 4],
+        "tracks": [
+          {
+            "name": "Mix Bus",
+            "volume_db": 0.0,
+            "pan": 0.0,
+            "mute": false,
+            "solo": false,
+            "fx": [],
+            "items": [{"type": "audio", "position_beats": 0, "length_beats": 8, "source": "mix-clipping.wav", "notes": []}]
+          }
+        ],
+        "markers": [],
+        "measurements": {
+          "loudness": {"true_peak_dbtp": 0.04},
+          "clipping": {"clipped_samples": 98880}
+        }
+      },
+      "generated_audio": [
+        {"filename": "mix-clipping.wav", "kind": "hard_clipped_sine", "sample_rate": 48000, "duration_seconds": 4.0}
+      ]
+    },
+    "mix-muddy.rpp": {
+      "snapshot": {
+        "project": "mix-muddy.rpp",
+        "tempo_bpm": 120,
+        "time_signature": [4, 4],
+        "tracks": [
+          {
+            "name": "Mix Bus",
+            "volume_db": 0.0,
+            "pan": 0.0,
+            "mute": false,
+            "solo": false,
+            "fx": [],
+            "items": [{"type": "audio", "position_beats": 0, "length_beats": 8, "source": "mix-muddy.wav", "notes": []}]
+          }
+        ],
+        "markers": [],
+        "measurements": {
+          "spectral": {"bands_db_rel": {"low_mid": 0.0, "high_mid": -21.0}}
+        }
+      },
+      "generated_audio": [
+        {"filename": "mix-muddy.wav", "kind": "muddy_two_tone", "sample_rate": 48000, "duration_seconds": 4.0}
+      ]
+    },
+    "melody-offkey.rpp": {
+      "snapshot": {
+        "project": "melody-offkey.rpp",
+        "tempo_bpm": 100,
+        "time_signature": [4, 4],
+        "tracks": [
+          {
+            "name": "Lead",
+            "volume_db": 0.0,
+            "pan": 0.0,
+            "mute": false,
+            "solo": false,
+            "fx": [],
+            "items": [
+              {
+                "type": "midi",
+                "position_beats": 0,
+                "length_beats": 8,
+                "notes": [
+                  {"pitch": 60, "start_beats": 0, "length_beats": 0.9, "velocity": 92, "channel": 0},
+                  {"pitch": 62, "start_beats": 1, "length_beats": 0.9, "velocity": 92, "channel": 0},
+                  {"pitch": 64, "start_beats": 2, "length_beats": 0.9, "velocity": 92, "channel": 0},
+                  {"pitch": 66, "start_beats": 3, "length_beats": 0.9, "velocity": 92, "channel": 0},
+                  {"pitch": 67, "start_beats": 4, "length_beats": 0.9, "velocity": 92, "channel": 0},
+                  {"pitch": 69, "start_beats": 5, "length_beats": 0.9, "velocity": 92, "channel": 0},
+                  {"pitch": 67, "start_beats": 6, "length_beats": 0.9, "velocity": 92, "channel": 0},
+                  {"pitch": 64, "start_beats": 7, "length_beats": 0.9, "velocity": 92, "channel": 0}
+                ]
+              }
+            ]
+          }
+        ],
+        "markers": [],
+        "measurements": {}
+      },
+      "generated_audio": []
+    }
+  }
+}
