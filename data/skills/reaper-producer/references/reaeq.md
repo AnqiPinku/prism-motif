@@ -76,7 +76,7 @@ also need to insert the ReaEQ and set it atomically, use a single short
 ## Verify (mandatory — satisfies the skill's "verify after write" rule)
 
 The EQ getter is normalized, so verify with the formatted display strings of the
-underlying params: `get_fx_params(track_index, fxidx)` returns every param with a
+underlying params: `get_fx_params(track_index, fx_index)` returns every param with a
 `formatted` field (e.g. `"3.0 kHz"`, `"-4.0 dB"`). Scan it to confirm the band
 landed where intended, and report the before→after values to the user.
 
@@ -100,5 +100,5 @@ Run once with REAPER open and the bridge running; check that the returned
   is correct as written.
 - Formatted is a normalized number (e.g. `0.6`) → `isnorm=false` is NOT real
   units on this build. Switch to writing normalized values, and a small
-  `set_eq_band` helper that does the Hz→norm curve conversion becomes worth
+  dedicated EQ-band bridge helper (doing the Hz→norm curve conversion) becomes worth
   adding to the bridge after all.

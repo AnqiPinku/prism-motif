@@ -312,10 +312,17 @@ Phase 3.1 完成。离线证据：13 项 server 自测 + 19 项内嵌 Lua 运行
 
 ### 3.2 工具契约
 
-- [ ] 静态检查 Skill 中的工具名；
-- [ ] 验证参数名、单位、索引与追加/替换语义；
-- [ ] Skill 示例必须通过当前 Tool Schema；
-- [ ] 写操作标明可撤销性与覆盖风险。
+- [x] 静态检查 Skill 中的工具名；
+- [x] 验证参数名、单位、索引与追加/替换语义；
+- [x] Skill 示例必须通过当前 Tool Schema；
+- [x] 写操作标明可撤销性与覆盖风险（MIDI 工具的 undo/追加/替换语义见 3.1；
+      渲染工具补 OVERWRITE 警示；destructive 描述义务由检查器持续门禁）。
+
+已落地：`tests/check_tool_contracts.py`（spawn 两个真实 MCP server 取 schema 对账
+Skill 引用；进 CI）。首跑即抓 14 条真实漂移：6 个技能里的错误参数名
+（wav→path、focus→question、start_beat→start_beats、fxidx→fx_index、
+param_index→param、start/end→start_beats/end_beats）、幻觉工具引用
+（set_eq_band）、以及 add_track_fx 无法寻址 master 总线的过度承诺——全部修正。
 
 ### 3.3 音频术语
 

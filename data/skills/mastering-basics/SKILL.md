@@ -63,11 +63,11 @@ render_to_wav(全曲区间) → measure_loudness(path) → 看 integrated LUFS �
 
 ```
 1. render_to_wav(master 段, 含 head/tail 各 500ms 静音, out_path 可省略自动落 %TEMP%)
-2. measure_loudness(wav) → integrated LUFS / true_peak / LRA
+2. measure_loudness(path) → integrated LUFS / true_peak / LRA
 3. 差多少 dB,回限制器 threshold 推等量(差 -2dB 就 threshold 再降 2dB)
 4. 若 LRA < 6 且是流行/摇滚 → threshold 上抬 1dB 松开,不然 Spotify normalize 后声音死
 5. 若 true_peak > -1.0 → ceiling 降到 -1.2,或换支持 true peak 的限制器
-6. listen_subjective(wav) → 听 muddy/harsh/pumping;若报告 "pumping at 1:23"(限制器泵浦感,音量呼吸式起伏),回步骤 3 减 1dB 增益
+6. listen_subjective(path) → 听 muddy/harsh/pumping;若报告 "pumping at 1:23"(限制器泵浦感,音量呼吸式起伏),回步骤 3 减 1dB 增益
 7. add_marker 在 REAPER 工程标 "MASTER v1 -14LUFS -1.0dBTP" 便于回溯
 ```
 
