@@ -326,10 +326,15 @@ param_index→param、start/end→start_beats/end_beats）、幻觉工具引用
 
 ### 3.3 音频术语
 
-- [ ] 区分 Integrated / Short-term / Momentary LUFS；
-- [ ] Skill 不再把片段 Integrated 误称 Short-term；
-- [ ] 增加真正的时间序列响度工具，或收缩现有表述；
-- [ ] 平台响度写成参考和策略，不写成唯一母带目标。
+- [x] 区分 Integrated / Short-term / Momentary LUFS；
+- [x] Skill 不再把片段 Integrated 误称 Short-term（工具描述与 mastering-basics
+      均明示"片段测得的是该片段的 integrated"）；
+- [x] 增加真正的时间序列响度工具（扩展 measure_loudness：short_term_max /
+      momentary_max / short_term_series 逐秒曲线，K 加权一次三尺度共享，
+      合成 burst 测试验证 6-9s 响段可精确定位）；
+- [x] 平台响度写成参考和策略（mastering-basics 重写：归一化参考线 ≠ 交付目标，
+      交付区间按风格审美选；checklist 的 ±0.5 LU 硬指标改为策略区间；
+      pumping 诊断改为主观听感 + short_term_series 曲线交叉验证）。
 
 ### 3.4 Skill 可信度
 

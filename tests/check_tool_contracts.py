@@ -40,7 +40,16 @@ KNOWN_NON_TOOLS = {
     "prism_session",             # 认证 cookie 名
     "open_hat",                  # 音乐术语示例
     "tool_policy",               # 配置文件名
-    "low_mid",                   # analyze_audio 返回的频段名（结果字段，非入参）
+}
+
+# 工具返回字段登记表：MCP 没有输出 schema，技能引用的结果字段名在此人工登记。
+# 新增返回字段时同步补这里——漏登会被当成"不存在的工具"拦下，属有意设计。
+OUTPUT_FIELDS = {
+    # measure_loudness / analyze_audio 的响度块
+    "integrated_lufs", "short_term_max_lufs", "momentary_max_lufs",
+    "short_term_series", "loudness_range_lu", "true_peak_dbtp", "sample_peak_db",
+    # analyze_audio 频段名
+    "low_mid", "high_mid",
 }
 
 CALL_RE = re.compile(r"([a-z][a-z0-9_]{2,})\(([^()]*)\)")
@@ -89,7 +98,7 @@ def schema_enum_values(spec) -> set:
 
 
 def check_skills(tools: dict, problems: list) -> None:
-    param_vocabulary = set()
+    param_vocabulary = set(OUTPUT_FIELDS)
     for spec in tools.values():
         param_vocabulary |= schema_properties(spec)
         param_vocabulary |= schema_enum_values(spec)
