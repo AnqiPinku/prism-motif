@@ -17,7 +17,7 @@ description: 当用户说"混音听起来浑/糊/刺/闷/薄/响度不够/低频
 1. `render_to_wav(out_path=None)` — 省略路径会自动落 `%TEMP%/prism-renders/`,不污染工程。
 2. `measure_loudness(path)` — 拿三个数:integrated LUFS、true peak(dBTP)、LRA。
 3. `analyze_audio(path)` — 拿 spectral centroid(谱心,单位 Hz,人声流行歌 1.5-3 kHz 正常,>4 kHz 偏刺、<1.2 kHz 偏闷。可以理解成"频谱重心的位置")、tempo、key、频段能量分布。
-4. `listen_subjective(path, question="mix problems")` — Gemini 给带时间戳的标签:`0:34 muddy 200Hz` / `1:12 sibilant 7kHz` / `vocal buried -3dB`。
+4. `listen_subjective(path, question="mix problems")` — Gemini 给带时间戳的标签:`0:34 muddy 200Hz` / `1:12 sibilant 7kHz` / `vocal buried -3dB`。带时间戳的响度类标签(pumping/某段过响)先用 `measure_loudness` 的 `short_term_series` 在对应秒数核对曲线再动手——主观听感要有客观曲线背书,曲线平稳就换假设。
 
 ## 术语速查(第一次出现即用)
 - **stem** = 分组导出的一路音频(vocal stem、drum stem),不是单轨也不是最终成品。
