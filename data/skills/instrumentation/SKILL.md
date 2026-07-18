@@ -44,7 +44,7 @@ description: 当用户需要决定"这首歌放几轨、每轨用什么乐器、
 风格切换只改"多加什么"和"删什么",6 轨骨架不动。
 
 - **Pop**:+ Vocal double(主 vocal 录两遍,复制轨 pan L30/R30)、+ Piano 高八度 layer(和 pad 同和弦、高一个八度)。
-- **Lo-fi Hip-hop**:删 Pad → 换 Rhodes 电钢;Hat 用 swing 58%(在 REAPER 的 MIDI 编辑器里 Grid → Swing 拉 0.58);全体加一条 bus,ReaEQ 12kHz 以上 lowpass 砍 -12dB/oct 制造"闷"感。
+- **Lo-fi Hip-hop**:删 Pad → 换 Rhodes 电钢;Hat 用 swing 58%(MPC 口径,50%=平直;REAPER 的 Grid Swing 以 0%=平直计,等效约 +16%——别直接拉 0.58,那是重 shuffle);全体加一条 bus,ReaEQ 12kHz 以上 lowpass 砍 -12dB/oct 制造"闷"感。
 - **EDM/House**:+ sidechain pad(Track FX 加 ReaComp,Detector input 指向 kick 送来的信号,Threshold 触发时压 6dB, Release 200ms)、+ Riser 8 小节爬升音效。Bass 拆两轨:sub sine(ReaSynth Sine, HPF 关, LPF 80Hz)+ mid bass(80–250Hz)。
 - **Cinematic/Orchestra**:Strings 分 4 层(Bass/Cello/Viola/Violin, pan L60/L20/R20/R60),Brass 单独一轨占 200Hz–2kHz。轨数放到 20+,靠 bus 分组管理(Strings bus / Brass bus / Perc bus 各一条)。
 - **Rock**:+ Rhythm guitar L/R 各一轨 double(pan L80/R80,不同 take 录音自然错开)、+ Lead guitar center。Bass 用 DI+cab 模拟。
@@ -85,7 +85,7 @@ Kontakt / 第三方音色库需要用户在 Kontakt 界面手动加载具体 pat
 ## Anti-patterns
 
 - **一次开 20 轨才开始混**:先 6 轨骨架完成到能循环听 4 小节,再加装饰。轨多不等于满,等于糊(frequency masking 叠满)。
-- **Bass 不 HPF**:20–60Hz 全留给 kick,bass 必须 HPF 80Hz(-18dB/oct),否则低频抢功率、母带一压全塌。
+- **Bass 不 HPF**:20–60Hz 全留给 kick,bass 默认 HPF 80Hz(-18dB/oct),否则低频抢功率、母带一压全塌。例外:EDM 拆出的 sub 层就是设计来占 40–80Hz 的(kick 靠 sidechain 让位),那一层不 HPF。
 - **Pad 塞满整个频谱**:Pad 只负责 200Hz–4kHz 的和声垫,低于 200Hz HPF,高于 4kHz LPF,不然 vocal 站不出来。
 - **"再加一个 lead 会更丰富"**:同一段频率 + 同一节奏位再加一轨 = frequency masking,听感更糊不是更满。
 - **假装能自动加载 Kontakt patch**:agent 只能 `add_track_fx("Kontakt")`,具体 patch 用户手动选。明说,不要糊弄。
