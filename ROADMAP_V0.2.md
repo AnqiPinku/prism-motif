@@ -296,13 +296,16 @@ tests/
 
 ### 3.1 MIDI 原子修改
 
-- [ ] 新增 `update_midi_note`；
-- [ ] 新增 `delete_midi_notes`；
-- [ ] 新增 `replace_midi_notes`；
-- [ ] 替换操作进入 REAPER Undo Block；
-- [ ] Pitch Correction 不再调用只追加的 add_midi_notes 做替换；
-- [ ] 写操作返回 before/after 摘要；
-- [ ] 验证无重复音符、错轨和属性污染。
+- [x] 新增 `update_midi_note`；
+- [x] 新增 `delete_midi_notes`；
+- [x] 新增 `replace_midi_notes`；
+- [x] 替换操作进入 REAPER Undo Block（三个写操作均单 undo 块，pcall 保证出错也配对关闭）；
+- [x] Pitch Correction 不再调用只追加的 add_midi_notes 做替换（composition-workflow、
+      tension-design 同类误导表述一并清除）；
+- [x] 写操作返回 before/after 摘要；
+- [ ] 验证无重复音符、错轨和属性污染（离线已验：13 项 server 自测 + 19 项内嵌 Lua
+      运行时行为仿真——校验前置/undo 配对/降序删除/muted 保真；**真机 REAPER 验收
+      待做**：开 REAPER 后桥自动加载新代码，跑一轮真实 get→replace→undo 即可勾）。
 
 ### 3.2 工具契约
 
