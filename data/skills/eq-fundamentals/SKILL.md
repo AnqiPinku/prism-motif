@@ -30,7 +30,7 @@ description: Trigger this skill when the user is mixing and describes a symptom 
 | Kick 和 Bass 打架 | 60–150 Hz | 互补切 | 见下节 |
 | 闷/沉/没空气 | 10–16 kHz | High shelf boost | +2 到 +3 dB,从 10 kHz 起 |
 
-**De-esser** = 专门压齿音的动态处理,只在 s/sh 触发时衰减 5-9 kHz。**侧链(sidechain)** = 让一个信号触发另一个通道的压缩/衰减。REAPER 里 ReaXComp 多段压缩器可以当 de-esser 用:5-9 kHz 段设 threshold -20 dB、ratio 4:1、attack 1 ms。
+**De-esser** = 专门压齿音的动态处理,只在 s/sh 触发时衰减 5-9 kHz。**侧链(sidechain)** = 让一个信号触发另一个通道的压缩/衰减。REAPER 里 ReaXComp 多段压缩器可以当 de-esser 用:5-9 kHz 段设 ratio 4:1、attack 1 ms;threshold 从 -20 dB 起调,以只在 s/sh 处触发为准(随素材电平变,不是固定值)。
 
 **扫频找问题点(sweep-and-destroy)** — 新建一个 bell,增益拉到 +8 dB、Q=6,慢慢横着扫频率轴,最难听/最凸出的那个 Hz 就是元凶,记下这个数,然后把增益翻负号变成 cut(比如 +8 dB 变 -4 dB)。这不是玄学,是标准工作流。
 
@@ -46,7 +46,7 @@ description: Trigger this skill when the user is mixing and describes a symptom 
 - Kick: 60 Hz bell -3 dB, Q=1.5;3 kHz bell +3 dB, Q=1.5(打点感,click)
 - Bass: 60 Hz bell +2 dB, Q=1.2
 
-**A/B 判断**:solo(单独听)Kick+Bass 两轨,先用 measure_loudness 确认两轨响度差 <0.5 LUFS,单独听 30 秒,能分清两个乐器谁在哪就对了;糊成一坨就换方案。
+**A/B 判断**:solo(单独听)Kick+Bass 两轨,先用 measure_loudness 把两轨响度拉到大致相当(差 1 LUFS 内,只为对比公平,不代表成品配比),单独听 30 秒,能分清两个乐器谁在哪就对了;糊成一坨就换方案。
 
 ## 高通/低通 —— 每轨都要问一遍
 
@@ -70,7 +70,7 @@ description: Trigger this skill when the user is mixing and describes a symptom 
 
 ## 用 listen_subjective 交叉验证(耳朵疲劳时必做)
 
-改完 EQ,3 步命令流:
+改完 EQ,4 步命令流:
 1. `set_time_selection` 框选 20 秒关键段(副歌 + 前奏一半)
 2. `render_to_wav`(不填 out_path 就自动落 %TEMP%/prism-renders)
 3. `measure_loudness` 对比 EQ 前后 LUFS,**必须** <0.5 LUFS 差再判断(响=好听幻觉)

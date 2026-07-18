@@ -14,7 +14,7 @@ description: 当你混完一首歌准备上传 Spotify/Apple Music/YouTube/Sound
 
 ## 先给一个默认动作(30 秒内开工)
 
-假设你的目标是 Spotify + Apple Music(占流媒体 80%),先把混音 bus 渲染为 wav(24bit,采样率保持工程原生)拿去测:
+假设你的目标是 Spotify + Apple Music(两大主流平台),先把混音 bus 渲染为 wav(24bit,采样率保持工程原生)拿去测:
 
 ```
 render_to_wav(全曲区间) → measure_loudness(path) → 看 integrated LUFS 和 true_peak
