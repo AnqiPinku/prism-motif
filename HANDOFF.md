@@ -17,7 +17,7 @@
 - v0.1.1-security 批次经 8 路对抗审查后修复三处（chatReducer 未知事件白屏、CORS 漏 X-Filename、Vite dev 认证断裂）并已提交，含真发消息的 WebView E2E 验证；
 - Windows CI 于 2026-07-11 首绿：`ci.yml` 在干净 runner 复现全套验证；当时的 `msi-smoke.yml` 完整安装链通过。该证据属于 v0.1.1-security 基线，Phase 5 发布候选必须用当前主线重新验证；
 - 三仓均已推送（两个 MCP 仓先变基到洗净历史再推，fast-forward）；
-- 当前 Git 分支：`main`；本地有尚未推送的阶段提交，不再声称与 `origin/main` 对齐；
+- 当前 Git 分支：`main`；2026-07-19 已将本地阶段提交全部推送，四仓（prism-core、prism-motif、reaper-mcp、music-perception-mcp）均与各自 `origin/main` 对齐，prism-core 已建立私有 GitHub 远程；
 - reaper-mcp 存在用户原有的未跟踪 `TOOL_COVERAGE.md`，不得覆盖或删除。
 
 ## 先读
