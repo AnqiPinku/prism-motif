@@ -157,8 +157,8 @@ export default function Settings({ state, trust, setTrust, onClose, onSaved, onO
           <div className="sec settings-sec">
             <h3>行为</h3>
             <div className="togglerow">信任模式
-              <span className="tag">仅本次启动；只跳过普通写操作</span>
-              <button className={'switch' + (trust ? '' : ' off')} aria-label="信任模式" onClick={() => setTrust(!trust)} /></div>
+              <span className="tag">工程内编辑自动执行；录音、文件与代码仍确认</span>
+              <button className={'switch' + (trust ? '' : ' off')} aria-label="信任模式" title="仅本次启动有效" onClick={() => setTrust(!trust)} /></div>
             {onOpenOnboarding && (
               <div className="togglerow">重新查看引导
                 <span className="tag">再走一遍 3 步向导</span>

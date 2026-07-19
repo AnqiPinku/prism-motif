@@ -79,7 +79,8 @@ Tauri shell
 - 前端通过 Tauri 获取运行时 API Session；
 - Origin、Token、CSP 三层同时限制；
 - 工具按 read/write/destructive/execute/external/record 分类；
-- destructive、execute、record 始终确认；
+- 信任模式放行 Policy 已知的 REAPER 工程内编辑，`batch` 展开到子调用判定；
+- 录音、外部调用、任意代码/命令和文件覆盖/删除始终确认；
 - 正式包不包含 system-mcp。
 
 具体威胁与控制见 `SECURITY.md`。
