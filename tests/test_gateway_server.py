@@ -53,7 +53,8 @@ class GatewayServerSecurityTests(unittest.TestCase):
         self.assertEqual(json.loads(body)["error"]["code"], "unauthorized")
 
     def test_unauthenticated_writes_never_reach_sensitive_routes(self):
-        for path in ("/api/settings", "/api/mcp/toggle", "/api/chat"):
+        for path in ("/api/settings", "/api/mcp/toggle", "/api/chat",
+                     "/api/chat/cancel"):
             with self.subTest(path=path):
                 status, _, body = self.request(
                     "POST",

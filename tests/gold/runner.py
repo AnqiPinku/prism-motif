@@ -6,6 +6,7 @@ import argparse
 import copy
 import json
 import math
+import os
 import re
 import shutil
 import struct
@@ -181,6 +182,24 @@ def _parser():
     score = commands.add_parser("score", help="score evidence.json in a prepared run")
     score.add_argument("--run-dir", required=True)
 
+    live = commands.add_parser(
+        "live",
+        help="run a prepared task through the local Gateway and live REAPER",
+    )
+    live.add_argument("--run-dir", required=True)
+    live.add_argument("--gateway-url", default="http://127.0.0.1:8770")
+    live.add_argument("--session-token-env", default="PRISM_SESSION_TOKEN")
+    live.add_argument("--provider")
+    live.add_argument("--thread-id")
+    live.add_argument("--trust-mode", action="store_true")
+    live.add_argument(
+        "--leave-after",
+        action="store_true",
+        help="leave REAPER at the Agent result instead of reloading the clean copy",
+    )
+    live.add_argument("--timeout", type=float, default=180)
+    live.add_argument("--bridge-server")
+
     summary = commands.add_parser("summary", help="aggregate report.json files and evaluate the gate")
     summary.add_argument("--reports-dir", required=True)
     summary.add_argument("--output")
@@ -201,6 +220,26 @@ def main(argv=None):
             output = {"run_dir": str(prepare_run(args.task_id, args.runs_dir, args.run_id))}
         elif args.command == "score":
             output = score_run(args.run_dir)
+        elif args.command == "live":
+            from .live_driver import GatewayChatClient, load_reaper_bridge, run_live
+
+            token = os.environ.get(args.session_token_env, "")
+            bridge = load_reaper_bridge(args.bridge_server)
+            chat_client = GatewayChatClient(
+                args.gateway_url,
+                token,
+                timeout=args.timeout,
+                provider=args.provider,
+            )
+            result = run_live(
+                args.run_dir,
+                bridge,
+                chat_client,
+                trust_mode=args.trust_mode,
+                restore_before=not args.leave_after,
+                thread_id=args.thread_id,
+            )
+            output = result["report"]
         else:
             output = summarize_reports(load_reports(args.reports_dir))
             if args.output:

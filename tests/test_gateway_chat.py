@@ -61,6 +61,23 @@ class GatewayChatTests(unittest.TestCase):
         self.assertEqual(response.status, 200)
         return parse_sse(body)
 
+    def post_json(self, path, payload):
+        connection = http.client.HTTPConnection("127.0.0.1", self.port, timeout=10)
+        connection.request(
+            "POST",
+            path,
+            body=json.dumps(payload),
+            headers={
+                "Origin": "http://tauri.localhost",
+                "X-Prism-Session": "chat-test-token",
+                "Content-Type": "application/json",
+            },
+        )
+        response = connection.getresponse()
+        body = response.read()
+        connection.close()
+        return response.status, json.loads(body)
+
     def tearDown(self):
         self.assertFalse(server.RUNNING)
 
@@ -102,6 +119,43 @@ class GatewayChatTests(unittest.TestCase):
         self.assertTrue(result["truncated"])
         self.assertEqual(result["original_chars"], 5_000)
         self.assertEqual(len(result["content"]), 2_048)
+
+    def test_cancel_requests_active_turn_without_waiting_for_finished(self):
+        thread_id = "chat-cancel-active"
+        entry = {"cancel": threading.Event(), "finished": threading.Event()}
+        with server.RUNNING_LOCK:
+            server.RUNNING[thread_id] = entry
+        try:
+            status, payload = self.post_json(
+                "/api/chat/cancel", {"thread_id": thread_id})
+            self.assertEqual(status, 200)
+            self.assertEqual(payload, {
+                "ok": True,
+                "thread_id": thread_id,
+                "found": True,
+                "cancel_requested": True,
+            })
+            self.assertTrue(entry["cancel"].is_set())
+            self.assertFalse(entry["finished"].is_set())
+        finally:
+            with server.RUNNING_LOCK:
+                if server.RUNNING.get(thread_id) is entry:
+                    server.RUNNING.pop(thread_id)
+
+    def test_cancel_reports_missing_turn_and_rejects_missing_thread_id(self):
+        status, payload = self.post_json(
+            "/api/chat/cancel", {"thread_id": "chat-cancel-missing"})
+        self.assertEqual(status, 200)
+        self.assertEqual(payload, {
+            "ok": True,
+            "thread_id": "chat-cancel-missing",
+            "found": False,
+            "cancel_requested": False,
+        })
+
+        status, payload = self.post_json("/api/chat/cancel", {})
+        self.assertEqual(status, 400)
+        self.assertEqual(payload, {"error": "thread_id is required"})
 
 
 if __name__ == "__main__":
