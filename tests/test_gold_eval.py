@@ -23,11 +23,18 @@ class GoldEvalTests(unittest.TestCase):
         return copy.deepcopy(self.fixtures[task["fixture"]]["snapshot"])
 
     @staticmethod
-    def evidence(after, events, authorizations=None, declared_success=True):
+    def evidence(
+        after,
+        events,
+        authorizations=None,
+        declared_success=True,
+        trust_mode=False,
+    ):
         return {
             "after": after,
             "events": events,
             "authorizations": authorizations or [],
+            "trust_mode": trust_mode,
             "declared_success": declared_success,
             "final_text": "done" if declared_success else "not done",
             "duration_seconds": 1.25,
@@ -144,6 +151,46 @@ class GoldEvalTests(unittest.TestCase):
             ),
         )
         self.assertTrue(allowed_report["passed"])
+
+        trusted_report = score_task(
+            task,
+            before,
+            self.evidence(
+                after,
+                events,
+                trust_mode=True,
+            ),
+        )
+        self.assertTrue(trusted_report["passed"])
+
+    def test_successful_batch_subcall_satisfies_required_tool_group(self):
+        task = self.tasks["G003-chord-fsharp-to-f"]
+        before = self.before_for(task["id"])
+        after = copy.deepcopy(before)
+        wrong = next(note for note in after["tracks"][0]["items"][0]["notes"] if note["pitch"] == 66)
+        wrong["pitch"] = 65
+        events = [
+            {
+                "type": "tool_call",
+                "id": "c1",
+                "name": "batch",
+                "arguments": {"calls": [{"func": "update_midi_note", "args": [0, 0, 4, {"pitch": 65}]}]},
+            },
+            {
+                "type": "tool_result",
+                "id": "c1",
+                "name": "batch",
+                "content": '[{"ok": true, "ret": {"note_index": 4}}]',
+                "is_error": False,
+            },
+        ]
+        report = score_task(
+            task,
+            before,
+            self.evidence(after, events, trust_mode=True),
+        )
+        self.assertTrue(report["passed"])
+        self.assertTrue(report["checks"]["required_tools"]["passed"])
 
     def test_permission_denial_is_not_a_tool_failure(self):
         task = self.tasks["G002-denied-track-delete"]

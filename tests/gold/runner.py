@@ -140,6 +140,7 @@ def prepare_run(task_id, runs_dir, run_id=None):
         "after": copy.deepcopy(before),
         "events": [],
         "authorizations": [],
+        "trust_mode": False,
         "declared_success": False,
         "final_text": "",
         "duration_seconds": 0.0,

@@ -161,9 +161,9 @@ record        录音、录屏或捕获输入
 - [x] 未声明工具默认按 `write` 处理，且信任模式不能放行未知工具；
 - [x] `read` 自动执行；
 - [x] `write` 普通模式确认；
-- [x] `destructive`、`execute`、`external`、`record` 始终确认；
-- [x] 信任模式不能跳过 destructive / execute / external / record；
-- [x] `delete_track`、`run_lua`、覆盖渲染、录音进入强制确认；
+- [x] `execute`、`external`、`record` 始终确认；普通模式下 `destructive` 也确认；
+- [x] 信任模式只放行 Policy 已知的 REAPER 工程内写入，以及显式标记的可撤销删除/替换；
+- [x] `batch` 展开到子调用判定；任意 ReaScript/Lua、覆盖渲染、录音仍进入强制确认；
 - [ ] 权限卡展示目标、参数、风险与不可逆性。
 
 ### 1.4 信任模式
@@ -173,7 +173,7 @@ record        录音、录屏或捕获输入
 - [x] 不再持久化到 localStorage；
 - [x] MCP 开关或 Provider 设置改变时自动退出；
 - [x] UI 始终显示当前信任状态；
-- [x] 明确说明信任模式只跳过普通 write。
+- [x] 明确说明信任模式让 REAPER 工程内编辑自动执行，录音、文件与代码操作仍确认。
 
 ### 1.5 正式包收口
 
@@ -194,9 +194,9 @@ record        录音、录屏或捕获输入
 - [x] 未认证请求不能启用 MCP；
 - [x] 未认证请求不能发起聊天；
 - [x] 健康握手拒绝错误 Instance ID；
-- [x] delete_track 无确认被拒绝；
+- [x] 普通模式下 delete_track 无确认被拒绝；信任模式可放行显式标记的工程内删除；
 - [x] run_lua 无确认被拒绝；
-- [x] 信任模式不能跳过 destructive；
+- [x] 信任模式不能跳过任意代码、录音、外部调用和文件副作用；
 - [x] 正式包配置与 Resources 不包含 system-mcp；
 - [x] 日志扫描不命中敏感值；
 - [x] 关闭窗口后 Gateway 与 MCP 子进程退出。
@@ -375,6 +375,8 @@ melody-offkey.rpp
 - [x] 6 个工程经真实 REAPER 逐个打开验证，轨道结构一致，两个 MIDI 工程分别读出 13 / 8 个音符；
 - [x] 建立首批 10 个唯一任务、证据 schema、隔离运行准备器、结构/测量评分器和发布门汇总；
 - [x] `mix-clipping` / `mix-muddy` 经真实 REAPER 渲染，再由 `music-perception-mcp` 完成基线测量；
+- [x] 完成 G001 的普通模式与信任模式现场试跑：信任模式下 12 次工具调用、2 个安全 `batch` 为零权限请求；该轮因对象式批参数造成额外轨道而失败，未伪记为通过；
+- [x] reaper-mcp 对已知工具的对象式批参数增加规范化，避免 Lua 把对象强制转换成错误轨名；离线 MCP 自测已覆盖；
 - [ ] 接入真实 Prism Motif Agent 运行驱动，自动采集前后快照、事件、许可和耗时证据；
 - [ ] 跑完首批 10 个真实任务并形成基线，再扩到至少 30 个唯一任务。
 
@@ -580,7 +582,7 @@ Phase 1 首批任务状态（历史，已完成并合入 `main`）：
 
 1. [ ] 安排真实制作人复核关键 Skill；
 2. [x] 建立 3.5 的 6 个固定 REAPER 工程、首批 10 个任务定义与离线 Gold Task Harness；
-3. [ ] 接入真实 Agent 运行驱动，先跑出这 10 个任务的可重复基线，再扩到至少 30 个唯一任务并达到 v0.2 Eval 门；
+3. [ ] REAPER 重新运行桥接后复跑 G001；随后固化真实 Agent 运行驱动，先跑出这 10 个任务的可重复基线，再扩到至少 30 个唯一任务并达到 v0.2 Eval 门；
 4. [ ] 用渲染、测量和响度匹配 A/B 关闭 3.4 最后一项；
 5. [ ] Eval 门通过后进入 Phase 4，随后执行 Phase 5 当前主线的完整发布验证。
 

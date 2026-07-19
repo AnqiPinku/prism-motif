@@ -116,6 +116,8 @@ def validate_evidence(evidence):
     validate_snapshot(evidence.get("after"), "evidence.after")
     _require(evidence.get("events"), list, "evidence.events")
     _require(evidence.get("authorizations", []), list, "evidence.authorizations")
+    if "trust_mode" in evidence and not isinstance(evidence["trust_mode"], bool):
+        raise GoldSchemaError("evidence.trust_mode must be boolean")
     if not isinstance(evidence.get("declared_success"), bool):
         raise GoldSchemaError("evidence.declared_success must be boolean")
     duration = evidence.get("duration_seconds")

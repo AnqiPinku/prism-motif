@@ -49,7 +49,8 @@ v0.1.1-security 的安全代码、CI、MSI 与升级/卸载验证已完成并合
 - 所有 `/api/*` 必须统一认证；
 - 不允许通配 CORS；
 - 未知工具默认不是只读；
-- destructive / execute / record 不可被信任模式绕过；
+- 信任模式只自动放行 Policy 已知的 REAPER 工程内写入，以及显式标记为可信、可撤销的工程内删除/替换；
+- 安全 `batch` 必须逐项按子调用判定，未知子调用按 `execute` 拦截；录音、外部调用、任意代码/命令和文件覆盖/删除不可被信任模式绕过；
 - Key、Authorization、Session Token 不得进入日志或提交；
 - 正式包不包含 system-mcp；
 - Provider 主机变化必须被视为敏感配置变更。

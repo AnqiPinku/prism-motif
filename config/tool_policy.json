@@ -20,19 +20,53 @@
     "add_midi_notes": "write",
     "update_midi_note": "write",
 
-    "delete_midi_notes": "destructive",
-    "replace_midi_notes": "destructive",
+    "delete_midi_notes": {"risk": "destructive", "trust": true},
+    "replace_midi_notes": {"risk": "destructive", "trust": true},
     "add_track_fx": "write",
     "set_fx_preset": "write",
     "set_fx_param": "write",
     "set_time_selection": "write",
     "add_marker": "write",
 
-    "delete_track": "destructive",
+    "delete_track": {"risk": "destructive", "trust": true},
     "render_project": "destructive",
     "reaper_call": "execute",
     "run_lua": "execute",
-    "batch": "execute",
+    "batch": {
+      "risk": "execute",
+      "batch": {
+        "project_functions": [
+          "get_project_summary",
+          "list_tracks",
+          "set_tempo",
+          "set_time_signature",
+          "add_track",
+          "update_track",
+          "delete_track",
+          "create_midi_item",
+          "add_midi_notes",
+          "get_midi_notes",
+          "update_midi_note",
+          "delete_midi_notes",
+          "replace_midi_notes",
+          "add_track_fx",
+          "list_track_fx",
+          "list_fx_presets",
+          "set_fx_preset",
+          "get_fx_params",
+          "set_fx_param",
+          "list_installed_fx",
+          "transport",
+          "set_time_selection",
+          "add_marker",
+          "render_project",
+          "render_to_wav"
+        ],
+        "aliases": {
+          "get_project_summary": "reaper_status"
+        }
+      }
+    },
     "listen_subjective": "external",
 
     "run_command": "execute",
