@@ -23,7 +23,7 @@ v0.2 的产品定位固定为：
 
 ## 2. 本周期不做
 
-在 v0.2.0 发布前冻结以下扩张：
+在 v0.2.0 发布前冻结以下范围外扩张；这不阻止补全已有作曲、编曲、混音三条主路径所必需的产品状态、错误处理与恢复能力：
 
 - 不增加第四种工作模式；
 - 不做多 Agent、Reflexion 或规划器；
@@ -53,11 +53,15 @@ Phase 1  v0.1.1-security
   ↓
 Phase 2  自动化验证与 CI
   ↓
-Phase 3  工具语义、音乐知识与 Agent Eval
+Phase 3  工具语义、音乐知识与 Gold A 开发底座
   ↓
-Phase 4  前端 / Gateway 结构重构
+Phase 4  产品主路径补全与结构收口
   ↓
-Phase 5  v0.2.0 发布可信度
+Gold B   最小真机生命周期冒烟
+  ↓
+Gold C Prep  冻结前评测契约与内容证据
+  ↓
+Phase 5  发布候选冻结、Gold C 与 v0.2.0 发布可信度
 ```
 
 | 阶段 | 目标 | 发布门 |
@@ -65,9 +69,19 @@ Phase 5  v0.2.0 发布可信度
 | 0 | 统一文档、保存基线、冻结范围 | 当前事实只有一个来源 |
 | 1 | 修复本地 Gateway 与工具权限 | v0.1.1-security |
 | 2 | CI、Fake Provider/MCP、端到端测试 | 关键路径离线可复现 |
-| 3 | 工具契约、音乐知识、Gold Tasks | Agent 不再自信地做错事 |
-| 4 | 测试保护下拆分结构 | 零行为回归 |
-| 5 | 元数据、许可证、安装与产品叙事 | v0.2.0 |
+| 3 | 工具契约、音乐知识、Gold A 开发底座 | 关键错误可确定性复现 |
+| 4 | 补全既定用户主路径，并在测试保护下拆分结构 | 主路径可用且零行为回归 |
+| Gold B | 对稳定主路径做一次最小真机生命周期冒烟 | bridge、SSE、隔离工程与恢复链可用 |
+| Gold C Prep | 完成冻结前评测契约、30-task catalog 与内容证据 | 被测对象和评测规则可同时冻结 |
+| 5 | 冻结发布候选，执行 Gold C、元数据、许可证、安装与产品叙事 | v0.2.0 |
+
+Gold Task 分为三个不同阶段，不能再混成一个当前施工门：
+
+1. **Gold A（开发期回归底座，已完成并进入维护态）**：保留 6 个 fixture、10 个任务定义、schema、评分器、一次性工程隔离和离线测试；停止主动扩张，发现真实缺陷时再固化回归案例，不追逐发布成功率；
+2. **Gold B（主路径稳定后的最小真机冒烟）**：只用全新 G001 一次性工程验证 bridge、SSE、信任模式、快照与无保存重载；它证明测试链可运行，不产生最终发布分数；
+3. **Gold C（发布候选信任门）**：冻结前完成至少 30 个唯一任务的 catalog、评分契约与制作人复核；产品、Prompt、Skill、工具契约、模型与 Provider 组合冻结后，先跑 10-task canary，再执行全部固定任务与最终指标。
+
+当前不运行完整 Gold live campaign，不为发布门主动扩充到 30 个任务；真实产品缺陷仍可增加针对性回归案例。完整 Gold C 不再阻塞 Phase 4；它只阻塞 v0.2.0 发布。
 
 ---
 
@@ -292,7 +306,7 @@ tests/
 
 ---
 
-## Phase 3：工具语义、音乐知识与 Agent Eval
+## Phase 3：工具语义、音乐知识与 Gold A 开发底座
 
 ### 3.1 MIDI 原子修改
 
@@ -355,10 +369,12 @@ creative_default  为快速开始提供的创作默认
       出口；段落 LUFS 阈值补「master 推到成品响度」前提；de-esser threshold 改为
       「起调值 + 触发判据」；vibrato 批量删除补吉他/口琴例外 + 删前 A/B；
       限制器在链上时增益映射非 1:1）；
-- [ ] 重要 Skill 经过真实制作人复核（人工门：需真实制作人参与，待用户安排）；
-- [ ] A/B 与测量用于验证重要建议（依赖 3.5 Gold Task 的渲染-测量闭环落地）。
+后续验证移交 Gold C Prep，不作为 Phase 3 完成门：
 
-### 3.5 Gold Task Eval
+- 重要 Skill 经过真实制作人复核（人工门：需真实制作人参与，待用户安排）；
+- 用响度匹配 A/B 与测量验证重要建议；该工作在候选冻结前完成，不等待 Gold C live campaign。
+
+### 3.5 Gold A：开发期确定性评测底座
 
 固定工程至少覆盖：
 
@@ -380,9 +396,15 @@ melody-offkey.rpp
 - [x] 修复后在真实 REAPER、composition 模式和信任模式下复跑 G001：工程内编辑零权限请求，只修改 `Chords`；一次桥接超时经状态复查和重试恢复。该轮用于暴露规则与声明缺口，不再作为当前严格评分的通过成绩；
 - [x] 实现真实 Prism Motif Agent live driver：精确校验一次性 fixture 路径、before 与未修改状态，自动采集 SSE/权限/快照/耗时，默认无保存重载同一工程副本并核验基线；
 - [x] 旧驱动试跑促使 C 大三和弦规则从单一八度改为 pitch class `0/4/7`，低八度合法 voicing 不再误判；
-- [ ] 重启桥接加载 beat-origin 修复后，用全新一次性工程真机验证重载生命周期并复跑当前严格 G001；
-- [ ] 增加最终自然语言声明与工程快照的一致性检查；当前 G001 已出现实际和弦顺序与最终文字不一致，不能只依赖结构任务通过；
-- [ ] 跑完其余首批任务并形成 10-task 真实基线，再扩到至少 30 个唯一任务。
+- [x] Gold A 到此进入维护态；当前只维护离线合约，并在产品代码暴露真实缺陷时增加针对性回归案例，不主动扩任务或跑分；
+
+后续事项不再作为 Phase 3 未完成项：
+
+- Gold B 在 Phase 4 主路径稳定后执行，见 Phase 4 验收；
+- 声明—工程一致性评分、G010 确定性故障注入、30-task catalog 与制作人/A-B 证据归入 Gold C Prep；
+- Gold C 对冻结候选的执行归入 Phase 5.1。
+
+当前暂停项：不复用旧 `build/gold-runs`，不为了填充数字重复跑 G001，不铺开其余任务的真机矩阵，不把未冻结产品上的结果写成最终可信度结论。
 
 指标：
 
@@ -394,7 +416,9 @@ melody-offkey.rpp
 - Before/After Measurement Validity；
 - 平均工具调用数和完成时间。
 
-### v0.2 Eval 门
+### Gold C：v0.2 发布候选 Eval 门
+
+以下指标定义现在保留，但只在 Phase 5 发布候选冻结后执行：
 
 - 至少 30 个 Gold Tasks；
 - 总成功率 ≥ 90%；
@@ -405,7 +429,28 @@ melody-offkey.rpp
 
 ---
 
-## Phase 4：结构重构
+## Phase 4：产品主路径补全与结构收口
+
+### 4.0 产品完整性盘点（当前施工入口）
+
+Gold A 已证明评测底座可以抓到真实错误，但它不能替代产品本身。先围绕既定范围定义并补全用户从启动到得到可核验结果的闭环：
+
+```text
+安装 / 启动
+  → Provider 与 REAPER / Bridge 连接
+  → 选择作曲、编曲或混音工作流
+  → 发出自然语言任务
+  → 安全执行并展示进度 / 必要的高风险确认
+  → 读回工程状态或测量结果
+  → 向用户解释实际完成内容、失败与恢复路径
+  → 保存线程并正常退出
+```
+
+- [ ] 逐步核对上述用户旅程，建立“已完成 / 不完整 / 阻塞”清单，并以真实界面和行为为证据；
+- [ ] 为作曲、编曲、混音各确定一个 v0.2 必须成立的纵向主路径；
+- [ ] 只补既定范围内阻断主路径的功能、状态展示、错误处理与恢复能力；模式、MCP、其他 DAW 和大型新能力仍冻结；
+- [ ] 明确哪些缺口必须进入 v0.2，哪些延期，避免用 Prompt、Gold 任务数量或内部测试界面掩盖产品缺口；
+- [ ] 主路径达到可用状态后再冻结行为边界，进入结构收口和 Gold B 最小真机冒烟。
 
 ### 4.1 前端
 
@@ -422,8 +467,8 @@ frontend/src/
   shared/
 ```
 
-- [ ] 先抽纯函数；
-- [ ] 再抽 Chat Event Reducer；
+- [x] Chat Event Reducer 与 SSE/UI 状态边界已在 Phase 2.2 抽出并有测试保护；
+- [ ] 继续抽取剩余可独立测试的纯函数；
 - [ ] 再抽只读展示组件；
 - [ ] 再抽 Workspace / REAPER Hooks；
 - [ ] 最后缩小根 App；
@@ -453,23 +498,51 @@ gateway/
 
 ### 验收
 
+- 三条既定主路径至少各有一个可由普通用户完成的纵向闭环；
+- 连接、执行、结果核验、失败与恢复状态不依赖内部测试脚本才能理解；
 - App.tsx 只负责高层组合；
 - Gateway Auth 只有一个入口；
 - 零 Lint 警告；
 - 构建体积相对基线增长不超过 15%，除非有记录；
-- 截图、Gold Tasks 和 Soak Test 无回归。
+- 截图、Gold A 离线回归和 Soak Test 无回归；
+- Phase 4 行为稳定后完成一次 Gold B G001 真机生命周期冒烟，不要求 10/30-task 发布分数。
 
 ---
 
-## Phase 5：v0.2.0 发布可信度
+## Gold C Prep：发布候选冻结前评测契约
 
-### 5.1 元数据
+本阶段只在 Phase 4 主路径稳定且 Gold B 冒烟通过后开始：
+
+- [ ] 在发布候选冻结前实现最终自然语言声明—工程快照一致性评分；
+- [ ] 实现 G010 的确定性 MIDI 更新故障注入，不依赖模型故意构造错误；
+- [ ] 完成关键 Skill 的制作人复核，以及处理后渲染、响度匹配 A/B 和测量证据；由复核引起的 Skill 或行为修改必须发生在候选冻结前；
+- [ ] 完成至少 30 个唯一任务的 catalog 与离线可评分定义，不在冻结后新增任务凑门槛；
+- [ ] 固定 catalog、evidence schema、scorer 与汇总器的版本边界，并让全部离线 Gold 合约通过；
+- [ ] 以上评测契约完成后才允许冻结发布候选；冻结后改变任务或评分规则会使相关 Gold C 结果失效。
+
+---
+
+## Phase 5：发布候选冻结、Gold C 与 v0.2.0 发布可信度
+
+### 5.0 发布候选冻结
+
+- [ ] 冻结产品行为、Prompt、关键 Skill、工具 schema / Policy 与评测任务版本；
+- [ ] 固定并记录用于 Gold C 的模型、Provider、参数、应用提交和两个 MCP 提交；
+- [ ] 冻结后只接受会使发布候选失效并重新验证的缺陷修复，不边跑分边改变被测对象。
+
+### 5.1 Gold C 最终信任门
+
+- [ ] 先执行固定 catalog 中首批 10 个唯一任务作为 canary；若候选与评测契约均不变，这 10 个结果计入最终全集并继续剩余任务；若发生任何变更，全部结果失效，必须重新冻结并从零开始；
+- [ ] 继续执行冻结 catalog 的剩余任务，使最终全集覆盖至少 30 个唯一任务并达到 Phase 3.5 定义的发布候选 Eval 门；
+- [ ] 任何模型、Prompt、Skill、工具契约或任务定义变更都使相关 Gold C 结果失效，必须重跑。
+
+### 5.2 元数据
 
 - [ ] package.json、Cargo.toml、tauri.conf、serverInfo 统一 0.2.0；
 - [ ] Cargo description / authors / license / repository 正确；
 - [ ] Git Tag、MSI 文件名、Release Notes 一致。
 
-### 5.2 许可证
+### 5.3 许可证
 
 - [ ] prism-motif MIT；
 - [ ] reaper-mcp MIT；
@@ -477,7 +550,7 @@ gateway/
 - [ ] 增加 THIRD_PARTY_NOTICES.md；
 - [ ] 逐项列出 bundled 组件与许可证义务。
 
-### 5.3 产品表述
+### 5.4 产品表述
 
 统一使用“本地优先”：
 
@@ -488,7 +561,7 @@ gateway/
 - [ ] 明确当前限制；
 - [ ] 增加 Security、Data Flow、Testing、Eval 章节。
 
-### 5.4 干净机验证
+### 5.5 干净机验证
 
 - [ ] 无 Python / Node / Rust；
 - [ ] 安装路径含空格；
@@ -514,7 +587,7 @@ RELEASE_NOTES.md
 
 - 安全测试全过；
 - CI 全绿；
-- Gold Tasks 达标；
+- 发布候选冻结后 Gold C 达标；
 - 无未授权破坏性操作；
 - 前端零 Lint 警告；
 - Rust 有实际测试；
@@ -549,6 +622,7 @@ test(evals): add REAPER gold-task harness
 refactor(chat): extract the event reducer and chat state machine
 refactor(ui): split workspace and archive components
 refactor(gateway): centralize auth and route services
+test(evals): run the frozen release-candidate Gold C gate
 docs: add security, data-flow and testing documentation
 chore(release): normalize package metadata and licenses
 release: v0.2.0
@@ -584,11 +658,13 @@ Phase 1 首批任务状态（历史，已完成并合入 `main`）：
 
 当前施工入口：
 
-1. [ ] 安排真实制作人复核关键 Skill；
-2. [x] 建立 3.5 的 6 个固定 REAPER 工程、首批 10 个任务定义与离线 Gold Task Harness；
-3. [ ] 重启桥接加载 beat-origin 修复，以全新一次性工程验证 live driver 的 SSE、快照、无保存重载和当前严格 G001；
-4. [ ] 补最终声明与工程状态一致性检查，用固化 driver 跑完首批 10 个真实任务，再扩到至少 30 个唯一任务并达到 v0.2 Eval 门；
-5. [ ] 用渲染、测量和响度匹配 A/B 关闭 3.4 最后一项；
-6. [ ] Eval 门通过后进入 Phase 4，随后执行 Phase 5 当前主线的完整发布验证。
+1. [x] 完成 Gold A：建立 6 个固定 REAPER 工程、首批 10 个任务定义、离线评分与一次性工程 live driver；底座现在进入维护态，不启动完整 live campaign；
+2. [ ] 执行 Phase 4.0 产品完整性盘点，以普通用户视角列出安装/连接、三模式任务、执行反馈、结果核验、失败恢复和线程保存的真实缺口；
+3. [ ] 在不增加模式、MCP、其他 DAW 或范围外大型能力的前提下，补全并稳定既定三条主路径；
+4. [ ] 在 Gold A 离线回归与 Soak 保护下完成必要的前端 / Gateway 结构收口；只有真实缺陷才新增 Gold 回归案例；
+5. [ ] 主路径稳定后执行 Gold B：加载 beat-origin 修复，用全新一次性 G001 工程做一次 bridge、SSE、信任模式、快照和无保存重载冒烟；
+6. [ ] Gold B 通过后执行 Gold C Prep：在发布候选冻结前完成声明—工程一致性评分、G010 确定性故障注入、至少 30 个唯一任务的固定 catalog、评测契约离线验证、制作人复核与响度匹配 A/B；
+7. [ ] 冻结发布候选及模型、Provider、Prompt、Skill、工具和任务 catalog 版本后，执行 Gold C 的 10-task canary；无变更则计入最终结果并继续剩余固定任务，有变更则重新冻结并从零开始；
+8. [ ] Gold C 通过后继续 Phase 5.2–5.5 的元数据、许可证、GUI、MSI、升级和干净机发布验证。
 
-在 Phase 3 Eval 门完成前，不新增模式、MCP、其他 DAW 或新的音乐功能，也不开始大规模 UI/Gateway 重写。
+范围外能力扩张仍冻结，但完整 Gold C 不再是 Phase 4 的前置条件。当前不主动重跑 G001、不跑其余 9 个真机任务，也不扩充到 30 个任务。
