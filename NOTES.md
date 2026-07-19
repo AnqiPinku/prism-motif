@@ -15,26 +15,27 @@
 9. 安全策略由代码执行，不能依赖 Skill 提示词。
 10. v0.2 前冻结新增模式和大型能力。
 11. 信任模式是会话级工作流开关：已知的 REAPER 工程内编辑与显式标记的可撤销删除/替换自动执行；录音、外部调用、任意代码/命令和显式文件覆盖/删除仍确认。安全 `batch` 必须展开到子调用判定。
+12. Gold live driver 每轮使用 `prepare` 生成的一次性工程副本：执行前核对精确工程、before 和未修改状态，执行后保存 after；默认无保存重载同一副本并验证回到基线，`--leave-after` 才保留结果。权限事件是自动证据，不是逐步骤人工审批。
 
 ## 已验证能力
 
 - Python ReAct 核心、上下文、压缩、重试与 MCP 超时有离线测试；
-- reaper-mcp Fake Bridge 测试通过并发现 25 个工具；
+- reaper-mcp Fake Bridge 自测与 32 工具契约门禁通过；
 - music-perception 合成 WAV 测试覆盖响度、真峰值、调性、频段和削波；
 - React 生产构建成功；
 - Tauri/Rust 有 3 项安全相关测试，debug app 完整构建成功；
 - Gateway/Auth/Policy/路径安全与日志脱敏产品测试 36 项通过；
 - 真实 Tauri WebView 烟雾测试覆盖设置、信任模式、状态请求与两个正式包 MCP；正常关闭后 Tauri、Gateway、MCP 残留均为 0；
 - v0.1.0 MSI 构建链存在；
-- 真实 REAPER 工程操作和渲染—分析闭环曾完成真机验证。
+- 真实 REAPER 工程操作和渲染—分析闭环已完成真机验证；旧驱动下的 G001 试跑证明 composition 模式与信任模式可让已知工程内编辑保持零权限请求，但当前更严格任务规则和一次性工程重载驱动尚未重新做真机验收。
 
 ## 当前最高风险
 
-1. 安全首版仍需 Windows-latest 干净主机验证；
-2. 前端事件状态机尚未抽出测试；
-3. Skill 中存在工具语义不一致和过度精确表述；
-4. App.tsx 与 Gateway Handler 已形成结构债务；
-5. 发布元数据、许可证和“离线”表述需要校正。
+1. Gold live driver 已改为一次性工程副本与无保存重载，离线生命周期 22/22 通过；真机重载与当前严格 G001 仍待复跑，其余首批任务和至少 30 个唯一任务的 Eval 门尚未完成。
+2. G001 出现过实际 MIDI 和弦顺序与 Agent 最终文字不一致；`composition-workflow` 已要求写后读回，最终声明—快照一致性仍未进入硬评分。
+3. G001 曾出现一次桥接超时，虽由 Agent 成功恢复，后续任务仍要保留超时、重试和桥接健康证据。
+4. Phase 3.4 的真实制作人复核与响度匹配 A/B/测量证据仍未完成。
+5. App.tsx 与 Gateway Handler 的结构债务留待 Eval 门后的 Phase 4；Phase 5 元数据、许可证和当前主线干净机发布验证仍待完成。
 
 ## 开发问题记录
 
@@ -73,6 +74,8 @@
 ```powershell
 python test_core.py
 python -m unittest discover -s tests -v
+python tests\check_tool_contracts.py
+python -m tests.gold.runner verify
 npm --prefix frontend run lint
 npm --prefix frontend run build
 C:\Users\XAQ\.cargo\bin\cargo.exe test --locked --manifest-path frontend/src-tauri/Cargo.toml

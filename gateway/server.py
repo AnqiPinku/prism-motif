@@ -155,6 +155,8 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/upload":           # 原始字节流，须在 JSON 解析之前拦截
             return self._upload()
         body = self._read_body()
+        if path == "/api/chat/cancel":
+            return self._chat_cancel(body)
         if path == "/api/chat":
             return self._chat(body)
         if path == "/api/skills":
@@ -594,6 +596,32 @@ class Handler(BaseHTTPRequestHandler):
                     "archived": runner.archived_workspaces()}
         except Exception as e:  # noqa: BLE001
             return {"error": str(e)}
+
+    def _chat_cancel(self, body):
+        """Request cancellation for one active chat turn without waiting for cleanup."""
+        thread_id = str(body.get("thread_id") or "").strip()
+        if not thread_id:
+            return self._json({"error": "thread_id is required"}, 400)
+
+        # Only copy the current entry while holding the registry lock.  The
+        # request must not block on the turn's finished event while locked.
+        with RUNNING_LOCK:
+            entry = RUNNING.get(thread_id)
+        if entry is None:
+            return self._json({
+                "ok": True,
+                "thread_id": thread_id,
+                "found": False,
+                "cancel_requested": False,
+            })
+
+        entry["cancel"].set()
+        return self._json({
+            "ok": True,
+            "thread_id": thread_id,
+            "found": True,
+            "cancel_requested": True,
+        })
 
     def _chat(self, body):
         goal = body.get("goal", "")
