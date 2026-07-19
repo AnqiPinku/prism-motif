@@ -86,6 +86,16 @@ def _is_number(value):
     return not isinstance(value, bool) and isinstance(value, (int, float))
 
 
+def _numbers_close(actual, expected, tolerance=1e-6):
+    return _is_number(actual) and abs(actual - expected) <= tolerance
+
+
+def _pitch_class(pitch):
+    if not _is_number(pitch) or int(pitch) != pitch:
+        return None
+    return int(pitch) % 12
+
+
 def _event_id(event):
     return event.get("id") or event.get("call_id")
 
@@ -194,6 +204,37 @@ def _task_expectations(task, before, after):
         if "max" in rule and (not _is_number(value) or value > rule["max"]):
             details.append("%s.%s is above %s" % (track_name, field, rule["max"]))
 
+    for rule in checks.get("item_rules", []):
+        track_name = rule.get("track")
+        track = after_tracks.get(track_name)
+        if track is None:
+            details.append("item rule target missing: %s" % track_name)
+            continue
+        items = track.get("items", [])
+        if "min_count" in rule and len(items) < rule["min_count"]:
+            details.append("%s has fewer than %s items" % (track_name, rule["min_count"]))
+        if "max_count" in rule and len(items) > rule["max_count"]:
+            details.append("%s has more than %s items" % (track_name, rule["max_count"]))
+        if "item_index" not in rule:
+            continue
+        item_index = rule["item_index"]
+        if item_index >= len(items):
+            details.append("%s item %s is missing" % (track_name, item_index))
+            continue
+        item = items[item_index]
+        if "type" in rule and item.get("type") != rule["type"]:
+            details.append(
+                "%s item %s type expected %r, got %r"
+                % (track_name, item_index, rule["type"], item.get("type"))
+            )
+        tolerance = rule.get("tolerance_beats", 1e-6)
+        for field in ("position_beats", "length_beats"):
+            if field in rule and not _numbers_close(item.get(field), rule[field], tolerance):
+                details.append(
+                    "%s item %s %s expected %s, got %r"
+                    % (track_name, item_index, field, rule[field], item.get(field))
+                )
+
     for rule in checks.get("note_rules", []):
         track_name = rule.get("track")
         notes = _all_notes(after, track_name)
@@ -208,6 +249,89 @@ def _task_expectations(task, before, after):
         for pitch in rule.get("forbidden_pitches", []):
             if pitch in pitches:
                 details.append("%s still contains forbidden pitch %s" % (track_name, pitch))
+        pitch_classes = {
+            pitch_class
+            for pitch_class in (_pitch_class(pitch) for pitch in pitches)
+            if pitch_class is not None
+        }
+        for pitch_class in rule.get("required_pitch_classes", []):
+            if pitch_class not in pitch_classes:
+                details.append(
+                    "%s is missing required pitch class %s" % (track_name, pitch_class)
+                )
+        for pitch_class in rule.get("forbidden_pitch_classes", []):
+            if pitch_class in pitch_classes:
+                details.append(
+                    "%s still contains forbidden pitch class %s" % (track_name, pitch_class)
+                )
+        if rule.get("allowed_pitch_classes"):
+            invalid_pitches = [pitch for pitch in pitches if _pitch_class(pitch) is None]
+            if invalid_pitches:
+                details.append("%s has %d non-integer MIDI pitches" % (track_name, len(invalid_pitches)))
+            disallowed = sorted(pitch_classes - set(rule["allowed_pitch_classes"]))
+            if disallowed:
+                details.append(
+                    "%s contains pitch classes outside the allowed set: %s"
+                    % (track_name, ", ".join(str(value) for value in disallowed))
+                )
+        if "exact_length_beats" in rule:
+            tolerance = rule.get("length_tolerance_beats", 1e-6)
+            bad = [
+                note
+                for note in notes
+                if not _numbers_close(
+                    note.get("length_beats"), rule["exact_length_beats"], tolerance
+                )
+            ]
+            if bad:
+                details.append(
+                    "%s has %d notes with length other than %s beats"
+                    % (track_name, len(bad), rule["exact_length_beats"])
+                )
+        if rule.get("exact_starts"):
+            expected_starts = rule["exact_starts"]
+            tolerance = rule.get("start_tolerance_beats", 1e-6)
+            grouped = {start: [] for start in expected_starts}
+            unexpected = []
+            for note in notes:
+                matches = [
+                    start
+                    for start in expected_starts
+                    if _numbers_close(note.get("start_beats"), start, tolerance)
+                ]
+                if len(matches) == 1:
+                    grouped[matches[0]].append(note)
+                else:
+                    unexpected.append(note)
+            if unexpected:
+                details.append(
+                    "%s has %d notes outside the required starts %s"
+                    % (track_name, len(unexpected), expected_starts)
+                )
+            for start, group in grouped.items():
+                if not group:
+                    details.append("%s has no notes at beat %s" % (track_name, start))
+                if "notes_per_start" in rule and len(group) != rule["notes_per_start"]:
+                    details.append(
+                        "%s has %d notes at beat %s instead of %s"
+                        % (track_name, len(group), start, rule["notes_per_start"])
+                    )
+                if rule.get("allowed_pitch_class_sets") and group:
+                    group_pitch_classes = {
+                        pitch_class
+                        for pitch_class in (
+                            _pitch_class(note.get("pitch")) for note in group
+                        )
+                        if pitch_class is not None
+                    }
+                    allowed_sets = {
+                        frozenset(values) for values in rule["allowed_pitch_class_sets"]
+                    }
+                    if frozenset(group_pitch_classes) not in allowed_sets:
+                        details.append(
+                            "%s notes at beat %s do not form an allowed pitch-class set: %s"
+                            % (track_name, start, sorted(group_pitch_classes))
+                        )
         if "exact_velocity" in rule:
             bad = [note for note in notes if note.get("velocity") != rule["exact_velocity"]]
             if bad:

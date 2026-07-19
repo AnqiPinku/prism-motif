@@ -16,6 +16,7 @@ REPO_ROOT = GOLD_ROOT.parents[1]
 TASKS_PATH = GOLD_ROOT / "tasks" / "gold_tasks.json"
 FIXTURES_DIR = GOLD_ROOT / "fixtures"
 FIXTURE_MANIFEST_PATH = FIXTURES_DIR / "manifest.json"
+REQUIRED_MODES = frozenset(("composition", "arrangement", "mix"))
 
 
 class GoldSchemaError(ValueError):
@@ -40,6 +41,22 @@ def _string_list(value, label):
     if not all(isinstance(item, str) and item for item in value):
         raise GoldSchemaError("%s must contain non-empty strings" % label)
     return value
+
+
+def _is_number(value):
+    return not isinstance(value, bool) and isinstance(value, (int, float))
+
+
+def _pitch_class_list(value, label):
+    values = _require(value, list, label)
+    if not all(
+        isinstance(item, int)
+        and not isinstance(item, bool)
+        and 0 <= item <= 11
+        for item in values
+    ):
+        raise GoldSchemaError("%s must contain pitch classes 0..11" % label)
+    return values
 
 
 def validate_snapshot(snapshot, label="snapshot"):
@@ -80,6 +97,10 @@ def validate_task_spec(task):
     for key in ("id", "fixture", "goal"):
         if not isinstance(task.get(key), str) or not task[key]:
             raise GoldSchemaError("task.%s must be a non-empty string" % key)
+    if task.get("required_mode") not in REQUIRED_MODES:
+        raise GoldSchemaError(
+            "task.required_mode must be composition, arrangement, or mix"
+        )
     for key in (
         "allowed_track_names",
         "required_track_names",
@@ -97,8 +118,95 @@ def validate_task_spec(task):
         _string_list(group, "task.required_tool_groups[%d]" % index)
 
     checks = _require(task.get("checks", {}), dict, "task.checks")
-    for key in ("track_rules", "note_rules", "measurement_rules"):
+    for key in ("track_rules", "item_rules", "note_rules", "measurement_rules"):
         _require(checks.get(key, []), list, "task.checks.%s" % key)
+    for rule in checks.get("track_rules", []):
+        _require(rule, dict, "track rule")
+        if not isinstance(rule.get("track"), str) or not rule["track"]:
+            raise GoldSchemaError("track rule.track must be a non-empty string")
+        if not isinstance(rule.get("field"), str) or not rule["field"]:
+            raise GoldSchemaError("track rule.field must be a non-empty string")
+        if not any(key in rule for key in ("equals", "min", "max")):
+            raise GoldSchemaError("track rule requires equals, min, or max")
+        for key in ("min", "max"):
+            if key in rule and not _is_number(rule[key]):
+                raise GoldSchemaError("track rule.%s must be numeric" % key)
+        if "min" in rule and "max" in rule and rule["min"] > rule["max"]:
+            raise GoldSchemaError("track rule min cannot exceed max")
+    for rule in checks.get("item_rules", []):
+        _require(rule, dict, "item rule")
+        if not isinstance(rule.get("track"), str) or not rule["track"]:
+            raise GoldSchemaError("item rule.track must be a non-empty string")
+        for key in ("min_count", "max_count", "item_index"):
+            if key in rule and (
+                not isinstance(rule[key], int)
+                or isinstance(rule[key], bool)
+                or rule[key] < 0
+            ):
+                raise GoldSchemaError("item rule.%s must be a non-negative integer" % key)
+        if (
+            "min_count" in rule
+            and "max_count" in rule
+            and rule["min_count"] > rule["max_count"]
+        ):
+            raise GoldSchemaError("item rule min_count cannot exceed max_count")
+        if "type" in rule and (not isinstance(rule["type"], str) or not rule["type"]):
+            raise GoldSchemaError("item rule.type must be a non-empty string")
+        for key in ("position_beats", "length_beats", "tolerance_beats"):
+            if key in rule and (not _is_number(rule[key]) or rule[key] < 0):
+                raise GoldSchemaError("item rule.%s must be a non-negative number" % key)
+    for rule in checks.get("note_rules", []):
+        _require(rule, dict, "note rule")
+        if not isinstance(rule.get("track"), str) or not rule["track"]:
+            raise GoldSchemaError("note rule.track must be a non-empty string")
+        for key in (
+            "required_pitch_classes",
+            "forbidden_pitch_classes",
+            "allowed_pitch_classes",
+        ):
+            _pitch_class_list(rule.get(key, []), "note rule.%s" % key)
+        for key in ("min_count", "max_count"):
+            if key in rule and (
+                not isinstance(rule[key], int)
+                or isinstance(rule[key], bool)
+                or rule[key] < 0
+            ):
+                raise GoldSchemaError("note rule.%s must be a non-negative integer" % key)
+        if (
+            "min_count" in rule
+            and "max_count" in rule
+            and rule["min_count"] > rule["max_count"]
+        ):
+            raise GoldSchemaError("note rule min_count cannot exceed max_count")
+        starts = rule.get("exact_starts", [])
+        _require(starts, list, "note rule.exact_starts")
+        if not all(_is_number(value) for value in starts):
+            raise GoldSchemaError("note rule.exact_starts must contain numbers")
+        if len(set(starts)) != len(starts):
+            raise GoldSchemaError("note rule.exact_starts must be unique")
+        if "notes_per_start" in rule and (
+            not isinstance(rule["notes_per_start"], int)
+            or isinstance(rule["notes_per_start"], bool)
+            or rule["notes_per_start"] <= 0
+        ):
+            raise GoldSchemaError("note rule.notes_per_start must be a positive integer")
+        if "notes_per_start" in rule and not starts:
+            raise GoldSchemaError("note rule.notes_per_start requires exact_starts")
+        pitch_class_sets = _require(
+            rule.get("allowed_pitch_class_sets", []),
+            list,
+            "note rule.allowed_pitch_class_sets",
+        )
+        for index, pitch_class_set in enumerate(pitch_class_sets):
+            label = "note rule.allowed_pitch_class_sets[%d]" % index
+            values = _pitch_class_list(pitch_class_set, label)
+            if not values or len(set(values)) != len(values):
+                raise GoldSchemaError("%s must be non-empty and unique" % label)
+        if pitch_class_sets and not starts:
+            raise GoldSchemaError("note rule.allowed_pitch_class_sets requires exact_starts")
+        for key in ("exact_length_beats", "start_tolerance_beats", "length_tolerance_beats"):
+            if key in rule and (not _is_number(rule[key]) or rule[key] < 0):
+                raise GoldSchemaError("note rule.%s must be a non-negative number" % key)
     for rule in checks.get("measurement_rules", []):
         _require(rule, dict, "measurement rule")
         if rule.get("comparison") not in ("decrease", "increase", "equal"):

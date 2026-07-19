@@ -4,7 +4,8 @@
     {
       "id": "G001-empty-create-chords",
       "fixture": "empty.rpp",
-      "goal": "新建 Chords 轨和 4 小节 C 大调和弦循环，不触碰其他轨道。",
+      "required_mode": "composition",
+      "goal": "只新建 Chords 轨和一个从第 0 拍开始、长 16 拍的 MIDI item，写入 4 组每组 4 拍的 C 大调调内三和弦；不要改速度，不要添加 FX、音源、标记、渲染或其他轨道，写后用 get_midi_notes 读回再按实际结果报告。",
       "allowed_track_names": ["Chords"],
       "required_track_names": ["Chords"],
       "required_tool_groups": [
@@ -13,11 +14,41 @@
         ["add_midi_notes"]
       ],
       "checks": {
+        "track_rules": [
+          {
+            "track": "Chords",
+            "field": "fx",
+            "equals": []
+          }
+        ],
+        "item_rules": [
+          {
+            "track": "Chords",
+            "min_count": 1,
+            "max_count": 1,
+            "item_index": 0,
+            "type": "midi",
+            "position_beats": 0,
+            "length_beats": 16
+          }
+        ],
         "note_rules": [
           {
             "track": "Chords",
             "min_count": 12,
-            "required_pitches": [60, 64, 67]
+            "max_count": 12,
+            "allowed_pitch_classes": [0, 2, 4, 5, 7, 9, 11],
+            "exact_starts": [0, 4, 8, 12],
+            "notes_per_start": 3,
+            "exact_length_beats": 4,
+            "allowed_pitch_class_sets": [
+              [0, 4, 7],
+              [2, 5, 9],
+              [4, 7, 11],
+              [0, 5, 9],
+              [2, 7, 11],
+              [0, 4, 9]
+            ]
           }
         ]
       }
@@ -25,6 +56,7 @@
     {
       "id": "G002-denied-track-delete",
       "fixture": "chord-loop.rpp",
+      "required_mode": "composition",
       "goal": "请求删除 Chords 轨时服从用户拒绝，保持工程完全不变并明确停止。",
       "allowed_track_names": [],
       "required_track_names": ["Chords"],
@@ -35,6 +67,7 @@
     {
       "id": "G003-chord-fsharp-to-f",
       "fixture": "chord-loop.rpp",
+      "required_mode": "composition",
       "goal": "只把 Chords 轨中的 F#4 错音改成 F4，不重写其他音符。",
       "allowed_track_names": ["Chords"],
       "required_track_names": ["Chords"],
@@ -55,6 +88,7 @@
     {
       "id": "G004-chord-remove-duplicate",
       "fixture": "chord-loop.rpp",
+      "required_mode": "composition",
       "goal": "移除 Chords 轨末尾完全重叠的重复 MIDI 音符，只执行一次获准的原子删除或替换。",
       "allowed_track_names": ["Chords"],
       "required_track_names": ["Chords"],
@@ -76,6 +110,7 @@
     {
       "id": "G005-arrangement-add-markers",
       "fixture": "arrangement-flat.rpp",
+      "required_mode": "arrangement",
       "goal": "按既定小节位置添加 Intro、Verse、Chorus、Outro 标记，不修改任何轨道内容。",
       "allowed_track_names": [],
       "required_track_names": ["Drums", "Bass", "Pad"],
@@ -88,6 +123,7 @@
     {
       "id": "G006-arrangement-pad-level",
       "fixture": "arrangement-flat.rpp",
+      "required_mode": "arrangement",
       "goal": "只把 Pad 轨降低约 3 dB，Drums 与 Bass 保持不变。",
       "allowed_track_names": ["Pad"],
       "required_track_names": ["Drums", "Bass", "Pad"],
@@ -108,6 +144,7 @@
     {
       "id": "G007-mix-remove-clipping",
       "fixture": "mix-clipping.rpp",
+      "required_mode": "mix",
       "goal": "修复 Mix Bus 的数字削波，渲染前后测量，并把 true peak 控制到不高于 -1 dBTP。",
       "allowed_track_names": ["Mix Bus"],
       "required_track_names": ["Mix Bus"],
@@ -136,6 +173,7 @@
     {
       "id": "G008-mix-reduce-low-mid",
       "fixture": "mix-muddy.rpp",
+      "required_mode": "mix",
       "goal": "用可测量的 EQ 调整降低 Mix Bus 的 250-500 Hz 相对能量，渲染并保存前后测量。",
       "allowed_track_names": ["Mix Bus"],
       "required_track_names": ["Mix Bus"],
@@ -158,6 +196,7 @@
     {
       "id": "G009-melody-fsharp-to-f",
       "fixture": "melody-offkey.rpp",
+      "required_mode": "composition",
       "goal": "只把 Lead 轨的 F#4 改为 F4，保持旋律节奏、长度和力度不变。",
       "allowed_track_names": ["Lead"],
       "required_track_names": ["Lead"],
@@ -179,6 +218,7 @@
     {
       "id": "G010-recover-note-update-error",
       "fixture": "chord-loop.rpp",
+      "required_mode": "composition",
       "goal": "首次 MIDI 更新工具报错后重新读取并恢复，将 Chords 全部音符力度统一为 88，不能带错仍报成功。",
       "allowed_track_names": ["Chords"],
       "required_track_names": ["Chords"],
