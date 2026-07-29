@@ -118,6 +118,24 @@ When the user asks for a new loop or song sketch:
 
 Read `references/production-semantics.md` for mappings from phrases like "鼓太直", "bass 糊", "副歌更宽", "更暗", and "更有冲击力" to safe REAPER actions.
 
+## Narration Discipline
+
+Chat output between tool calls is a status line, not a broadcast. Verbose
+re-narration buries the result and erodes trust.
+
+- State each analysis or measurement exactly once. After later tool calls,
+  report only the delta, the decision, and the next action. Never restate an
+  earlier table or a full analysis.
+- Decide once, then act. If a note needs correcting, name the correction one
+  time and apply it; do not reopen the decision in later narration unless new
+  evidence appeared.
+- The final summary must be grounded in a fresh read-back (`get_midi_notes`,
+  `reaper_status`), not in intentions: report what is actually in the
+  project, and say explicitly if a planned correction was not applied.
+- When naming MIDI pitches in prose, use the standard mapping with C4 = 60
+  (58 = A#3/Bb3, 59 = B3, 61 = C#4/Db4, 63 = D#4/Eb4). Check every note name
+  against its pitch number before writing it.
+
 ## Confirmation Policy
 
 Proceed without confirmation only for:
