@@ -71,7 +71,8 @@ export default function App() {
     chatRef.current = next
     setChat(next)
   }, [])
-  const [bypass, setBypass] = useState(false)
+  // 信任模式默认开启（NOTES 决策 11）：工程内编辑免确认；录音/外部调用/任意代码仍强制确认
+  const [bypass, setBypass] = useState(true)
   const [statusOpen, setStatusOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [onboarding, setOnboarding] = useState(false)
