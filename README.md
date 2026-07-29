@@ -119,10 +119,10 @@ prism-motif/
 ├── data/skills/        10 SKILL.md files driving the three-mode workflow
 ├── frontend/           React 19 + Vite + Tauri 2 shell
 │   └── src-tauri/      Rust shell (frameless titlebar, single-instance, gateway supervisor)
-├── packaging/          stage_pkg.py — sanitizes what actually goes into a build
-├── AGENTS.md           historical design notes (not the current agent contract)
-├── DESIGN.md           architecture snapshot
-└── NOTES.md            implementation notes across milestones
+├── packaging/          stage_pkg.py, sanitizes what actually goes into a build
+├── tests/              product tests, contract checks, soak and task harness
+├── DESIGN.md           architecture, boundaries and the decisions behind them
+└── SECURITY.md         threat model and the protections in place
 ```
 
 The sibling MCP servers live in separate repos: **[reaper-mcp-v2](https://github.com/AnqiPinku/reaper-mcp-v2)** (REAPER control + Lua bridge) and **[music-perception-mcp](https://github.com/AnqiPinku/music-perception-mcp)** (audio analysis + transcription + Gemini listening).

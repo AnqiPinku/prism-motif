@@ -1,6 +1,6 @@
-# 干净主机 MSI 安装烟雾测试（ROADMAP 施工入口 15）：
+# 干净主机 MSI 安装烟雾测试：
 # 静默安装 → 校验安装树（含禁入项）→ 启动并确认 bundled Gateway 子进程 → 收口 → 静默卸载。
-# 注意（NOTES.md 2026-07-10）：msiexec 无界面客户端可能先于 Installer 服务事务返回，
+# 注意：msiexec 无界面客户端可能先于 Installer 服务事务返回，
 # 所有状态断言都用轮询而不是相信客户端退出瞬间的文件系统。
 param(
     [string]$MsiPath = "",

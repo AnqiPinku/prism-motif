@@ -17,3 +17,9 @@ data/skills/_enabled.json
 # P5b 打包中间产物
 /build/
 /frontend/src-tauri/resources/python/
+
+# working docs (kept locally, not part of the public repo)
+/AGENTS.md
+/HANDOFF.md
+/NOTES.md
+/ROADMAP_V0.2.md
