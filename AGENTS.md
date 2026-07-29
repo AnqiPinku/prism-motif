@@ -10,6 +10,10 @@
 
 README 面向用户，不作为内部任务清单。
 
+跨仓通用规范：`../.agents/GIT.md` 是分支名、提交信息、PR、tag 与版本号的唯一依据，
+提交或推送前必读。硬规则：版本控制文本（分支名、提交信息、trailer、PR、tag、Release）
+里零 AI 工具名。
+
 ## 2. 当前范围
 
 v0.1.1-security 的安全代码、CI、MSI 与升级/卸载验证已完成并合入 `main`；当前公开版本仍为 v0.1.0。Gold A 的 6 个 fixture、10 个任务定义、离线评分与一次性工程 live driver 已完成，当前进入开发期维护态。现在按 `ROADMAP_V0.2.md` 进入 Phase 4 产品主路径补全与结构收口：
