@@ -298,7 +298,8 @@ class Handler(BaseHTTPRequestHandler):
             "default-src 'self'; script-src 'self'; "
             "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
             "font-src 'self' data: https://fonts.gstatic.com; "
-            "img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; "
+            "img-src 'self' data:; media-src 'self' blob:; "
+            "connect-src 'self'; frame-ancestors 'none'; "
             "object-src 'none'; base-uri 'none'; form-action 'none'",
         )
         origin = gateway_auth.cors_origin(self.headers)

@@ -25,3 +25,6 @@ tauri = { version = "2.11.3", features = [] }
 tauri-plugin-log = "2"
 tauri-plugin-single-instance = "2"
 getrandom = "0.2"
+
+[target.'cfg(windows)'.dependencies]
+webview2-com = "0.38"

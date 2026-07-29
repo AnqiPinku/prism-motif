@@ -44,6 +44,7 @@ function msLabel(ms?: number) {
 }
 import Settings, { type SettingsData } from './Settings'
 import Onboarding from './Onboarding'
+import RecordPanel from './RecordPanel'
 
 // data-tauri-drag-region marks the title-bar area draggable (only in the Tauri shell).
 const drag = inTauri ? { 'data-tauri-drag-region': '' } : {}
@@ -599,6 +600,8 @@ export default function App() {
         onClick={() => fileRef.current?.click()}>
         {uploading ? <span className="spinning"><I n="progress_activity" /></span> : <I n="add" />}
       </button>
+      <RecordPanel disabled={uploading || sending}
+        onDone={(name, path) => setAtts((a) => [...a, { name, path }])} />
       <textarea
         name="message"
         aria-label="消息内容"

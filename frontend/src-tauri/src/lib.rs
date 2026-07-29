@@ -281,13 +281,56 @@ pub fn run() {
                 }
                 _ => main_window,
             };
-            main_window
+            let main_window = main_window
                 .title("Prism Motif")
                 .decorations(false)
                 .inner_size(win_w, win_h)
                 .min_inner_size(960.0, 640.0)
                 .center()
                 .build()?;
+            // 只为应用自身源自动放行麦克风权限,其余权限种类保持 WebView2 默认询问;
+            // 注册失败仅降级为默认弹窗,不影响启动
+            if let Err(err) = main_window.with_webview(|webview| unsafe {
+                use webview2_com::Microsoft::Web::WebView2::Win32::{
+                    COREWEBVIEW2_PERMISSION_KIND, COREWEBVIEW2_PERMISSION_KIND_MICROPHONE,
+                    COREWEBVIEW2_PERMISSION_STATE_ALLOW,
+                };
+                use webview2_com::PermissionRequestedEventHandler;
+
+                let core = match webview.controller().CoreWebView2() {
+                    Ok(core) => core,
+                    Err(err) => {
+                        log::warn!("获取 CoreWebView2 失败,麦克风权限回退默认弹窗: {err}");
+                        return;
+                    }
+                };
+                let handler = PermissionRequestedEventHandler::create(Box::new(|_sender, args| {
+                    let Some(args) = args else {
+                        return Ok(());
+                    };
+                    let mut kind = COREWEBVIEW2_PERMISSION_KIND::default();
+                    args.PermissionKind(&mut kind)?;
+                    if kind != COREWEBVIEW2_PERMISSION_KIND_MICROPHONE {
+                        return Ok(());
+                    }
+                    let mut uri = webview2_com::pwstr_from_str("");
+                    args.Uri(&mut uri)?;
+                    // 精确匹配应用源,防止 tauri.localhost.evil.com 这类前缀伪装
+                    let uri = webview2_com::take_pwstr(uri);
+                    if uri == "http://tauri.localhost"
+                        || uri.starts_with("http://tauri.localhost/")
+                    {
+                        args.SetState(COREWEBVIEW2_PERMISSION_STATE_ALLOW)?;
+                    }
+                    Ok(())
+                }));
+                let mut token = 0_i64;
+                if let Err(err) = core.add_PermissionRequested(&handler, &mut token) {
+                    log::warn!("注册麦克风权限处理器失败,回退默认弹窗: {err}");
+                }
+            }) {
+                log::warn!("访问主窗口 WebView 失败,麦克风权限回退默认弹窗: {err}");
+            }
             Ok(())
         })
         .on_window_event(|window, event| {

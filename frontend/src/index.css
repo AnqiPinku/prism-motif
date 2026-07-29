@@ -338,6 +338,29 @@ details.toolrow:hover .chip{background:var(--surface-2)}
 .fab:disabled{opacity:1;background:#c7bfff;color:#fff;box-shadow:none}
 .clef{font-family:'Noto Music',serif;font-size:20px;line-height:1}
 
+/* 录音面板：composer 里的 mic 按钮 + 锚定其上的小面板（录音 → 试听 → 上传） */
+.recwrap{position:relative;display:flex}
+.recwrap .recmic.on{background:var(--red);color:#fff}
+.recwrap .recmic.on:hover{background:var(--red)}
+.recwrap .recmic:disabled{opacity:.5;cursor:default}
+.recmenu{position:absolute;bottom:46px;left:0;min-width:260px;background:var(--surface);border:1px solid var(--outline-var);border-radius:16px;box-shadow:0 8px 24px rgba(60,40,120,.18);padding:14px;z-index:20;display:flex;flex-direction:column;gap:10px;transform-origin:bottom left;animation:rec-open .12s ease}
+@keyframes rec-open{from{opacity:0;transform:translateY(4px) scale(.97)}to{opacity:1;transform:none}}
+.recrow{display:flex;align-items:center;gap:10px}
+.recdot{width:10px;height:10px;border-radius:50%;background:var(--red);flex-shrink:0;animation:rec-pulse 1s ease-in-out infinite}
+@keyframes rec-pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.45;transform:scale(.78)}}
+/* 电平条：外形沿用 run-bars，高度由内联 scaleY 按实时 rms 驱动 */
+.reclevel{flex:1;display:inline-flex;align-items:center;justify-content:center;gap:3px;height:22px}
+.reclevel span{width:3px;height:18px;border-radius:999px;background:var(--primary);transform:scaleY(.15);transition:transform .1s ease}
+.rectime{font-variant-numeric:tabular-nums;font-size:13px;color:var(--muted);flex-shrink:0}
+.rechint{font-size:12px;color:var(--muted)}
+.recbtns{display:flex;justify-content:flex-end;gap:8px}
+.recbtns button{display:inline-flex;align-items:center;gap:5px;border:none;border-radius:16px;height:32px;padding:0 16px;font-size:13px}
+.recbtns .use{background:var(--primary);color:#fff}
+.recbtns .use .spinning{color:#fff}
+.recbtns .redo{background:var(--surface-2);color:var(--on-surface-var)}
+.recbtns button:disabled{opacity:.6;cursor:default}
+.recerr{font-size:12px;color:var(--red)}
+
 /* Gemini-style empty hero: soft radial gradient + big greeting + centered composer */
 .hero{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:24px;padding:24px;
   background:radial-gradient(58% 52% at 50% 40%,rgba(124,77,255,.11),rgba(79,124,255,.06) 46%,transparent 72%)}
