@@ -60,7 +60,7 @@
 
 录音入口可能被模型、注入内容或外来页面滥用，把麦克风变成静默采集通道。
 
-控制：录音仅由界面中的显式用户手势发起，模型与 Agent 无法触发；WebView2 权限只对麦克风、且只对 `http://tauri.localhost` 自动放行，其余权限种类保持默认行为；采集音频在客户端编码为 WAV，只经认证的 loopback 上传通道（`/api/upload`，Session Token + Origin 白名单，200MB 上限）传输；CSP 仅新增 `media-src 'self' blob:` 用于本地预览；录音文件沿用现有上传保留策略（临时目录，最多保留 20 个）。
+控制：录音仅由界面中的显式用户手势发起，模型与 Agent 无法触发；WebView2 权限只对麦克风、且只对 `http://tauri.localhost` 自动放行，其余权限种类保持默认行为；采集音频在客户端编码为 WAV，只经认证的 loopback 上传通道（`/api/upload`，Session Token + Origin 白名单，200MB 上限）传输；CSP 仅新增 `media-src 'self' blob:` 用于本地预览；录音文件沿用现有上传保留策略（临时目录，最多保留 20 个）。已上传的音频仅可经唯一一条认证 loopback GET 路由（`/api/upload/file`，Session Token + Origin 白名单）回读，路径经 realpath 严格限定在上传目录内部，仅用于聊天附件的应用内重播。
 
 ### 打包攻击面
 

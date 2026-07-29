@@ -69,8 +69,8 @@ test('formatClock renders m:ss including the 5 minute cap', () => {
 })
 
 test('recordingName formats local date and time', () => {
-  assert.equal(recordingName(new Date(2026, 6, 29, 21, 43, 5)), 'recording-20260729-2143.wav')
-  assert.equal(recordingName(new Date(2026, 0, 3, 4, 7)), 'recording-20260103-0407.wav')
+  assert.equal(recordingName(new Date(2026, 6, 29, 22, 54, 5)), '哼唱-0729-2254.wav')
+  assert.equal(recordingName(new Date(2026, 0, 3, 4, 7)), '哼唱-0103-0407.wav')
 })
 
 test('chunkRms of known signals', () => {

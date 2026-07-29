@@ -87,6 +87,12 @@ def endpoint_host(value):
         return ""
 
 
+def uploads_root():
+    """聊天音频上传的受管临时根目录：/api/upload 写入、/api/upload/file 回读共用。"""
+    import tempfile
+    return os.path.join(tempfile.gettempdir(), "prism-uploads")
+
+
 _BRIDGE_INSTALLER = None
 
 
@@ -135,6 +141,9 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/mcp/tools":
             q = parse_qs(urlparse(self.path).query)
             return self._json(self._mcp_tools((q.get("name") or [""])[0]))
+        if path == "/api/upload/file":
+            q = parse_qs(urlparse(self.path).query)
+            return self._upload_file((q.get("path") or [""])[0])
         if path == "/api/reaper/status":
             return self._json(self._reaper_status())
         if path.startswith("/api/threads/"):
@@ -258,7 +267,7 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({"error": "文件为空或超过 200MB"}, 400)
         raw = urllib.parse.unquote(self.headers.get("X-Filename") or "audio.wav")
         name = re.sub(r"[^\w.\-一-鿿]+", "_", os.path.basename(raw))[-80:] or "audio.wav"
-        updir = os.path.join(tempfile.gettempdir(), "prism-uploads")
+        updir = uploads_root()
         os.makedirs(updir, exist_ok=True)
         # 每次上传一个唯一子目录，文件保留原名（显示干净）；只留最近 20 次
         import shutil
@@ -278,6 +287,38 @@ class Handler(BaseHTTPRequestHandler):
                 f.write(chunk)
                 remaining -= len(chunk)
         return self._json({"path": dest})
+
+    def _upload_file(self, raw_path):
+        """回读 /api/upload 存下的音频，供聊天附件在应用内重播。
+        唯一放行 prism-uploads 根目录严格内部的真实文件：realpath 解析后做
+        os.sep 前缀检查，根本身、目录、越界路径与 symlink 逃逸一律拒绝，绝不列目录。"""
+        if not raw_path:
+            return self._json({"error": "bad path"}, 400)
+        try:
+            root = os.path.realpath(uploads_root())
+            target = os.path.realpath(raw_path)
+        except (OSError, ValueError):        # 含 NUL 等畸形路径
+            return self._json({"error": "bad path"}, 400)
+        if not target.startswith(root + os.sep) or not os.path.isfile(target):
+            return self._json({"error": "gone"}, 404)
+        try:
+            f = open(target, "rb")
+        except OSError:                      # 竞态：检查后刚被保留策略清掉
+            return self._json({"error": "gone"}, 404)
+        with f:
+            ctype = ("audio/wav" if target.lower().endswith(".wav")
+                     else "application/octet-stream")
+            self.send_response(200)
+            self.send_header("Content-Type", ctype)
+            self.send_header("Content-Length", str(os.fstat(f.fileno()).st_size))
+            self.send_header("Cache-Control", "private, max-age=3600")
+            self._security_headers()         # 含 X-Content-Type-Options: nosniff
+            self.end_headers()
+            while True:                      # 与 _upload 反向：按块流出，不整读进内存
+                chunk = f.read(65536)
+                if not chunk:
+                    break
+                self.wfile.write(chunk)
 
     # ---------- helpers ----------
     def _read_body(self):

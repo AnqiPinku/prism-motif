@@ -49,11 +49,10 @@ export function formatClock(seconds: number): string {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
 }
 
-// 录音文件名：recording-20260729-2143.wav（本地时间，调用方传 Date 方便测试）
+// 录音文件名：哼唱-0729-2254.wav（本地时间，调用方传 Date 方便测试）
 export function recordingName(now: Date): string {
   const p = (n: number) => String(n).padStart(2, '0')
-  const d = `${now.getFullYear()}${p(now.getMonth() + 1)}${p(now.getDate())}`
-  return `recording-${d}-${p(now.getHours())}${p(now.getMinutes())}.wav`
+  return `哼唱-${p(now.getMonth() + 1)}${p(now.getDate())}-${p(now.getHours())}${p(now.getMinutes())}.wav`
 }
 
 // 电平表用：单块均方根，0 静音 1 满幅

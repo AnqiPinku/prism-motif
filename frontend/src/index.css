@@ -335,6 +335,10 @@ details.toolrow:hover .chip{background:var(--surface-2)}
 .attchip button:hover{background:rgba(33,0,93,.12)}
 .attchip.small{font-size:12px;padding:4px 10px;background:rgba(255,255,255,.55)}
 .uatts{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+/* 可播放音频胶囊（AudioChip）：播放键沿用 .attchip button 圆钮；已过期 = 置灰 + music_off */
+.attchip .aplay:disabled{cursor:default;opacity:.7}
+.attchip.gone{background:var(--surface-2);color:var(--muted)}
+.attchip .agone{font-size:11px;color:var(--muted);flex-shrink:0}
 .fab:disabled{opacity:1;background:#c7bfff;color:#fff;box-shadow:none}
 .clef{font-family:'Noto Music',serif;font-size:20px;line-height:1}
 

@@ -45,6 +45,7 @@ function msLabel(ms?: number) {
 import Settings, { type SettingsData } from './Settings'
 import Onboarding from './Onboarding'
 import RecordPanel from './RecordPanel'
+import AudioChip from './AudioChip'
 
 // data-tauri-drag-region marks the title-bar area draggable (only in the Tauri shell).
 const drag = inTauri ? { 'data-tauri-drag-region': '' } : {}
@@ -581,13 +582,11 @@ export default function App() {
       {atts.length > 0 && (
         <div className="attrow">
           {atts.map((a, i) => (
-            <span className="attchip" key={i}>
-              <I n="music_note" s={16} />
-              <span className="an">{a.name}</span>
+            <AudioChip key={i} name={a.name} path={a.path}>
               <button aria-label="移除附件" onClick={() => setAtts((x) => x.filter((_, j) => j !== i))}>
                 <I n="close" s={15} />
               </button>
-            </span>
+            </AudioChip>
           ))}
         </div>
       )}
@@ -1133,7 +1132,7 @@ function UserBubble({ text }: { text: string }) {
       {files.length > 0 && (
         <div className="uatts">
           {files.map((p, i) => (
-            <span key={i} className="attchip small"><I n="music_note" s={14} />{p.split(/[\\/]/).pop()}</span>
+            <AudioChip key={i} small name={p.split(/[\\/]/).pop() || p} path={p} />
           ))}
         </div>
       )}
