@@ -82,7 +82,8 @@ class GatewayChatTests(unittest.TestCase):
         self.assertFalse(server.RUNNING)
 
     def test_success_stream_has_monotonic_ids_and_done(self):
-        def fake_run(_goal, provider=None, on_event=None, thread_id=None, permission=None):
+        def fake_run(_goal, provider=None, on_event=None, thread_id=None, permission=None,
+                     on_toolhub=None):
             on_event({"type": "turn_start", "provider": provider or "fake"})
             on_event({"type": "delta", "text": "hel", "step": 1})
             on_event({"type": "delta", "text": "lo", "step": 1})
@@ -104,7 +105,8 @@ class GatewayChatTests(unittest.TestCase):
         self.assertTrue(any("provider failed" in event.get("message", "") for event in events))
 
     def test_large_tool_result_is_truncated_only_on_sse(self):
-        def fake_run(_goal, provider=None, on_event=None, thread_id=None, permission=None):
+        def fake_run(_goal, provider=None, on_event=None, thread_id=None, permission=None,
+                     on_toolhub=None):
             on_event({
                 "type": "tool_result",
                 "id": "1",

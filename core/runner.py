@@ -211,9 +211,11 @@ def delete_workspace(name):
     return True
 
 
-def run_turn(goal, provider=None, on_event=None, thread_id=None, permission=None):
+def run_turn(goal, provider=None, on_event=None, thread_id=None, permission=None,
+             on_toolhub=None):
     """在一个会话线程内跑一轮：载入该线程的历史 → 追加本轮 → 跑循环 → 存回同一线程。
-    返回 (thread_id, final)。同一对话多轮共用一个 thread_id，能记住上下文。"""
+    返回 (thread_id, final)。同一对话多轮共用一个 thread_id，能记住上下文。
+    on_toolhub(hub)：ToolHub 刚造好就回调，上层（网关监督线程）拿句柄远程 close() 解卡。"""
     reasoner, provider_name = build_reasoner(provider)
     settings = _settings()
     _notify = on_event or (lambda _e: None)
@@ -230,6 +232,11 @@ def run_turn(goal, provider=None, on_event=None, thread_id=None, permission=None
         enabled, tool_timeout=settings.get("tool_timeout_s", 60),
         per_tool_timeouts=settings.get("tool_timeout_overrides") or DEFAULT_TOOL_TIMEOUT_OVERRIDES,
         retryable=lambda name: name in read_set)
+    if on_toolhub:
+        try:
+            on_toolhub(toolhub)        # start() 之前就交句柄：连启动窗口卡死也能被远程拆掉
+        except Exception:              # noqa: BLE001 回调失败不拖垮回合
+            pass
     _notify({"type": "mcp_start", "server_count": len(enabled),
              "content": "正在连接 MCP 服务"})
 

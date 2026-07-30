@@ -41,8 +41,8 @@ TOOL_POLICY = ToolPolicy.from_file(paths.INSTALL_ROOT / "config" / "tool_policy.
 # 待确认的权限请求：id -> {"event": Event, "result": bool}
 PENDING = {}
 
-# 正在跑的回合：thread_id -> {"cancel": threading.Event(), "finished": threading.Event()}
-# 同线程再来一发 → 先 cancel 上一发 + 等它退出，避免两个 run_turn 并发写同一存档。
+# 正在跑的回合：thread_id -> {"cancel": Event, "finished": Event, "toolhub": ToolHub?}
+# 同线程再来一发 → 先 cancel 上一发 + 关它的 toolhub，等它退出，避免两个 run_turn 并发写同一存档。
 RUNNING = {}
 RUNNING_LOCK = threading.Lock()
 
@@ -57,6 +57,17 @@ def load_json(p, d):
         return json.loads(Path(p).read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return d
+
+
+# —— 回合监督参数（启动时读一次 settings；测试按模块属性打补丁）。
+# turn_deadline_s：整轮硬超时，兜住模型/工具双卡死的极端情况，默认 15 分钟。
+try:
+    TURN_DEADLINE_S = float(
+        load_json(CONFIG / "settings.json", {}).get("turn_deadline_s", 900))
+except (TypeError, ValueError):
+    TURN_DEADLINE_S = 900.0
+KILL_GRACE_S = 10.0      # 收网触发后等 worker 自行退出的宽限；超过即放弃（daemon 线程）
+HEARTBEAT_IDLE_S = 5.0   # SSE 心跳间隔，兼作断线探测节拍
 
 
 def validate_endpoint(value, allow_empty=False):
@@ -692,7 +703,13 @@ class Handler(BaseHTTPRequestHandler):
             RUNNING[tid] = {"cancel": cancel, "finished": finished}
         if prev:
             prev["cancel"].set()
-            prev["finished"].wait(timeout=30)   # 上一发把 toolhub.close() 走完再进
+            prev_hub = prev.get("toolhub")
+            if prev_hub is not None:
+                try:
+                    prev_hub.close()            # 直接拆上一发的工具通道，卡死的调用立即返回
+                except Exception:               # noqa: BLE001 幂等 close，护一层保险
+                    pass
+            prev["finished"].wait(timeout=12)   # 监督者宽限内必 set；12s 只是最后保险
 
         seq = 0
         closed = False
@@ -778,7 +795,7 @@ class Handler(BaseHTTPRequestHandler):
             # record=False 的 heartbeat 不会抛 TurnCancelled，只把心跳丢给对端；
             # 一旦 closed=True，就跟着退出，绝不写已关闭的 socket。
             while not closed and not cancel.is_set():
-                for _ in range(50):                     # 分片睡，取消响应更快
+                for _ in range(max(1, int(HEARTBEAT_IDLE_S * 10))):   # 分片睡，取消响应更快
                     if closed or cancel.is_set():
                         return
                     time.sleep(0.1)
@@ -832,27 +849,88 @@ class Handler(BaseHTTPRequestHandler):
                 pass
             return outcome == "allow"
 
-        emit({"type": "thread", "id": tid})
-        cancelled_by_client = False
+        # —— worker 线程跑回合，请求线程只做监督：卡死的模型/工具调用拖不住终帧。
+        reason = {"value": "ok"}      # ok | cancelled | disconnected | deadline | error
+        hub_ref = {"hub": None}       # 本发的 ToolHub 句柄（监督者的解卡杆）
+        done_sent = False
+
+        def on_toolhub(hub):
+            hub_ref["hub"] = hub
+            with RUNNING_LOCK:        # 也挂到 RUNNING，供同线程抢占者直接拉闸
+                entry = RUNNING.get(tid)
+                if entry is not None and entry.get("finished") is finished:
+                    entry["toolhub"] = hub
+
+        def worker_body():
+            try:
+                runner.run_turn(goal, provider=provider, on_event=emit,
+                                thread_id=tid, permission=permission,
+                                on_toolhub=on_toolhub)
+            except TurnCancelled:
+                if reason["value"] == "ok":
+                    reason["value"] = ("disconnected"
+                                       if closed and not cancel.is_set() else "cancelled")
+            except Exception as e:  # noqa: BLE001
+                reason["value"] = "error"
+                try:
+                    emit({"type": "error", "message": str(e)})
+                except TurnCancelled:
+                    pass
+
+        worker = threading.Thread(target=worker_body, daemon=True, name="turn-" + tid)
         try:
-            runner.run_turn(goal, provider=provider, on_event=emit,
-                            thread_id=tid, permission=permission)
-        except TurnCancelled:
-            cancelled_by_client = True
-        except Exception as e:  # noqa: BLE001
-            try: emit({"type": "error", "message": str(e)})
-            except TurnCancelled: pass
-        force_flush_deltas()   # 把窗未满的尾巴吐掉，别让最后几个 token 卡住
-        # 未发过 done 就没成功；断线时对端读不到也无所谓，但顺路发一发。
-        try:
-            emit({"type": "done", "cancelled": cancelled_by_client}, record=False)
-        except TurnCancelled:
-            pass
-        closed = True
-        finished.set()
-        with RUNNING_LOCK:
-            if RUNNING.get(tid, {}).get("finished") is finished:
-                RUNNING.pop(tid, None)
+            emit({"type": "thread", "id": tid})
+            started_mono = time.monotonic()
+            worker.start()
+            while True:
+                worker.join(0.5)
+                if not worker.is_alive():
+                    break
+                if cancel.is_set():
+                    reason["value"] = "cancelled"
+                elif closed:
+                    reason["value"] = "disconnected"
+                elif time.monotonic() - started_mono > TURN_DEADLINE_S:
+                    reason["value"] = "deadline"
+                else:
+                    continue
+                # —— 收网：复用取消信号逼停 record emit，再拆工具通道解开卡死的调用
+                cancel.set()
+                if hub_ref["hub"] is not None:
+                    try:
+                        hub_ref["hub"].close()     # close 幂等不抛（Batch 1），仍护一层
+                    except Exception:              # noqa: BLE001
+                        pass
+                worker.join(KILL_GRACE_S)
+                if worker.is_alive():              # 卡在不可中断调用里 → 放弃 daemon 线程
+                    print("[gateway] 放弃卡死回合线程 tid=%s reason=%s"
+                          % (tid, reason["value"]))
+                break
+        except TurnCancelled:                      # thread 帧就被打断（连接秒断/秒取消）
+            if reason["value"] == "ok":
+                reason["value"] = "cancelled" if cancel.is_set() else "disconnected"
+        finally:
+            # —— 终帧只此一处：worker 正常/报错/被放弃都由监督者收口，整流恰好一个 done。
+            if not done_sent:
+                done_sent = True
+                force_flush_deltas()   # 把窗未满的尾巴吐掉，别让最后几个 token 卡住
+                done = {"type": "done", "cancelled": reason["value"] == "cancelled",
+                        "reason": reason["value"]}
+                if hub_ref["hub"] is not None:
+                    try:               # 降级/熔断名单随终帧带给前端（close 后仍保留）
+                        done["degraded"] = [n for n, _ in hub_ref["hub"].failed]
+                        done["circuit_open"] = list(hub_ref["hub"].circuit_open)
+                    except Exception:  # noqa: BLE001
+                        pass
+                try:
+                    emit(done, record=False)
+                except (TurnCancelled, OSError):
+                    pass
+                closed = True
+                finished.set()
+                with RUNNING_LOCK:
+                    if RUNNING.get(tid, {}).get("finished") is finished:
+                        RUNNING.pop(tid, None)
 
 
 def _write_startup_error(msg):

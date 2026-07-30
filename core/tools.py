@@ -120,4 +120,4 @@ class ToolHub:
         self._index.clear()
         self._specs.clear()
         self._restarts.clear()
-        self.circuit_open.clear()
+        # failed / circuit_open 保留不清：回合"验尸"信息随网关终帧上报，而 close 总在读取前发生
