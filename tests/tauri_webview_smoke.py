@@ -73,12 +73,8 @@ def main() -> int:
 
         page.get_by_role("button", name="设置").click()
         page.locator(".settings-modal").wait_for(state="visible", timeout=15_000)
-        page.get_by_role("button", name="信任模式").click()
-        page.locator(".trust-active").wait_for(state="visible", timeout=5_000)
         page.locator(".settings-modal button[aria-label='关闭']").click()
         page.locator(".settings-modal").wait_for(state="hidden", timeout=5_000)
-        page.locator(".trust-active").click()
-        page.locator(".trust-active").wait_for(state="hidden", timeout=5_000)
         page.locator(".statuschip").click()
         page.get_by_text("连接状态", exact=True).wait_for(state="visible", timeout=5_000)
 
@@ -115,7 +111,6 @@ def main() -> int:
             "brand": page.locator(".brand").inner_text(),
             "body_has_primary_prompt": "今天想创作点什么" in page.locator("body").inner_text(),
             "settings_opened": True,
-            "trust_mode_toggled": True,
             "status_menu_opened": True,
             "mcp_results": mcp_results,
             "gateway_responses": gateway_responses,

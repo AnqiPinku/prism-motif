@@ -106,7 +106,7 @@ X-Prism-Session: <token>
 | 风险 | 默认策略 |
 |---|---|
 | read | 自动执行 |
-| write | 信任模式（默认开启，可在设置关闭）放行已知的 REAPER 工程内编辑；关闭时请求确认 |
+| write | 已知的 REAPER 工程内编辑自动执行（信任白名单，无开关）；白名单外的 write 请求确认 |
 | destructive | 请求确认；仅 Policy 显式标记的可撤销工程内删除/替换可由信任模式放行 |
 | execute | 始终确认并展示代码/命令 |
 | external | 按目标与副作用确认 |

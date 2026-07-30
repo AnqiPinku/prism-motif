@@ -72,8 +72,8 @@ export default function App() {
     chatRef.current = next
     setChat(next)
   }, [])
-  // 信任模式默认开启（NOTES 决策 11）：工程内编辑免确认；录音/外部调用/任意代码仍强制确认
-  const [bypass, setBypass] = useState(true)
+  // 信任模式始终开启、无 UI（NOTES 决策 11）：工程内编辑免确认；录音/外部调用/任意代码仍强制确认
+  const bypass = true
   const [statusOpen, setStatusOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [onboarding, setOnboarding] = useState(false)
@@ -673,11 +673,6 @@ export default function App() {
             })}
           </div>
         ) : null}
-        {bypass && (
-          <button className="trust-active" onClick={() => setBypass(false)} title="点击退出信任模式">
-            <I n="verified_user" s={17} />信任模式
-          </button>
-        )}
         <button className="iconbtn" aria-label="设置" onClick={() => setSettingsOpen(true)}><I n="settings" /></button>
         {inTauri && <WinControls />}
       </header>
@@ -938,7 +933,7 @@ export default function App() {
       )}
 
       {settingsOpen && state && (
-        <Settings state={state} trust={bypass} setTrust={setBypass}
+        <Settings state={state}
           onClose={() => setSettingsOpen(false)}
           onSaved={() => { loadState(); loadSettings() }}
           onOpenOnboarding={() => { setSettingsOpen(false); setOnboarding(true) }} />

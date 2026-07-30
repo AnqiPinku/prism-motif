@@ -11,8 +11,8 @@ const Icon = ({ n, s }: { n: string; s?: number }) => (
   <span className="material-symbols-outlined" style={s ? { fontSize: s } : undefined} aria-hidden>{n}</span>
 )
 
-export default function Settings({ state, trust, setTrust, onClose, onSaved, onOpenOnboarding }:
-  { state: State; trust: boolean; setTrust: (v: boolean) => void;
+export default function Settings({ state, onClose, onSaved, onOpenOnboarding }:
+  { state: State;
     onClose: () => void; onSaved: () => void; onOpenOnboarding?: () => void }) {
   const [data, setData] = useState<SettingsData | null>(null)
   const [def, setDef] = useState('')
@@ -61,7 +61,6 @@ export default function Settings({ state, trust, setTrust, onClose, onSaved, onO
       return
     }
     setHostChange(null)
-    setTrust(false)
     onSaved(); onClose()
   }
 
@@ -71,8 +70,8 @@ export default function Settings({ state, trust, setTrust, onClose, onSaved, onO
     alert('已从环境变量导入到钥匙链。建议清除旧的 GEMINI_API_KEY 环境变量并轮换该 key。')
   }
 
+  // 新启用 MCP 的陌生工具不在信任白名单内，Policy 侧仍会逐个要求确认
   const toggleMcp = async (name: string, enabled: boolean) => {
-    setTrust(false)
     await postJSON('/api/mcp/toggle', { name, enabled })
     onSaved()
   }
@@ -156,9 +155,6 @@ export default function Settings({ state, trust, setTrust, onClose, onSaved, onO
 
           <div className="sec settings-sec">
             <h3>行为</h3>
-            <div className="togglerow">信任模式
-              <span className="tag">工程内编辑自动执行；录音、文件与代码仍确认</span>
-              <button className={'switch' + (trust ? '' : ' off')} aria-label="信任模式" title="仅本次启动有效" onClick={() => setTrust(!trust)} /></div>
             {onOpenOnboarding && (
               <div className="togglerow">重新查看引导
                 <span className="tag">再走一遍 3 步向导</span>

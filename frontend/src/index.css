@@ -21,8 +21,6 @@ body{font-family:var(--sans);color:var(--on-surface);background:var(--surface)}
 .material-symbols-outlined{font-size:22px;line-height:1;vertical-align:middle;
   font-variation-settings:'opsz' 24,'wght' 400,'FILL' 0,'GRAD' 0;user-select:none}
 button{font-family:inherit;cursor:pointer}
-.trust-active{height:34px;display:flex;align-items:center;gap:6px;padding:0 12px;border:1px solid #d69a3b;border-radius:999px;background:#fff4df;color:#754600;font-size:13px;font-weight:600}
-.trust-active:hover{background:#ffe9bf}
 input,textarea{font-family:inherit}
 
 .app{height:100%;display:flex;flex-direction:column;background:var(--surface-container)}
