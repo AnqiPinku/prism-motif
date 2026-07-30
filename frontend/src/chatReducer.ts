@@ -23,6 +23,7 @@ export type RunSummary = {
   status: 'ok' | 'err'
   tools: RunTool[]
   reason?: string
+  warnings?: string[]       // 终帧带回的降级 / 熔断名单，渲染成 ⚠ 警示行
 }
 export type RunMeta = {
   provider?: string
@@ -38,6 +39,7 @@ export type RunMeta = {
   outputChars?: number
   heartbeatIdleMs?: number
   lastEvent?: string
+  notices?: string[]        // 回合中途的提醒行（如 mcp_degraded 的「部分工具不可用」）
 }
 export type RunActiveState =
   | { status: 'connecting'; requestedAt: number; phase: 'connecting'; work: string; tools: RunTool[]; meta: RunMeta }
@@ -64,6 +66,9 @@ export type ChatState = {
   turnStartedAt: number
   lastSeq?: number
   terminal?: 'done' | 'error' | 'cancelled'
+  lastEventAt: number | null   // 最近一次归约事件（含心跳）的时刻，看门狗以此判连接健康
+  lastGoal: string             // 本回合的原始目标文本，重试时回填输入框
+  retryable?: boolean          // 看门狗丢失 / deadline / error 收尾的回合，展示重试入口
 }
 
 export const createChatState = (): ChatState => ({
@@ -72,7 +77,19 @@ export const createChatState = (): ChatState => ({
   sending: false,
   run: { status: 'idle' },
   turnStartedAt: 0,
+  lastEventAt: null,
+  lastGoal: '',
 })
+
+// 看门狗：只看「距最近一次事件多久没响应」；15s 内正常，15-45s 视为连接不稳，45s 起判定丢失。
+// 回合不活跃（或还没有任何事件时间戳）时永远 ok，避免空闲界面误报。
+export function watchdogState(now: number, lastEventAt: number | null, runActive: boolean): 'ok' | 'degraded' | 'lost' {
+  if (!runActive || lastEventAt == null) return 'ok'
+  const idle = now - lastEventAt
+  if (idle >= 45_000) return 'lost'
+  if (idle >= 15_000) return 'degraded'
+  return 'ok'
+}
 
 export const isActiveRun = (run: RunState): run is RunActiveState =>
   run.status === 'connecting' || run.status === 'running'
@@ -127,9 +144,10 @@ function finishRun(
   now: number,
   reason?: string,
   terminal: ChatState['terminal'] = status === 'ok' ? 'done' : 'error',
+  extra: { warnings?: string[]; retryable?: boolean } = {},
 ): ChatState {
   if (!isActiveRun(state.run)) {
-    return { ...state, sending: false, terminal, turnStartedAt: 0 }
+    return { ...state, sending: false, terminal, turnStartedAt: 0, retryable: !!extra.retryable }
   }
   const start = state.turnStartedAt
     || (state.run.status === 'running' ? state.run.startedAt : state.run.requestedAt)
@@ -138,6 +156,7 @@ function finishRun(
     durationMs: Math.max(0, now - start),
     status,
     reason,
+    warnings: extra.warnings?.length ? extra.warnings : undefined,
     tools: state.run.tools,
   }
   const withSummary = patchLastMessage(state, (message) => ({
@@ -153,6 +172,7 @@ function finishRun(
     sending: false,
     turnStartedAt: 0,
     terminal,
+    retryable: !!extra.retryable,
   }
 }
 
@@ -176,17 +196,20 @@ export function startChat(state: ChatState, goal: string, now: number): ChatStat
     turnStartedAt: now,
     lastSeq: undefined,
     terminal: undefined,
+    lastEventAt: now,
+    lastGoal: goal,
+    retryable: false,
   }
 }
 
-export function failChat(state: ChatState, reason: string, now: number, prefix = '请求失败：'): ChatState {
+export function failChat(state: ChatState, reason: string, now: number, prefix = '请求失败：', retryable = false): ChatState {
   if (state.terminal) return state
   const failed = patchLastMessage(state, (message) => ({
     ...message,
     streaming: false,
     text: prefix + reason,
   }))
-  return finishRun(failed, 'err', now, reason)
+  return finishRun(failed, 'err', now, reason, 'error', { retryable })
 }
 
 export function cancelChat(state: ChatState, now: number, reason = '已停止'): ChatState {
@@ -210,6 +233,8 @@ export function replaceConversation(state: ChatState, threadId: string | null, m
     turnStartedAt: 0,
     lastSeq: undefined,
     terminal: undefined,
+    lastEventAt: null,
+    retryable: false,
   }
 }
 
@@ -255,7 +280,10 @@ export function reduceChatEvent(state: ChatState, event: ChatEvent, now: number)
   if (state.terminal) return state
   if (event.seq != null && state.lastSeq != null && event.seq <= state.lastSeq) return state
 
-  let next = event.seq == null ? state : { ...state, lastSeq: event.seq }
+  // 每个被归约的事件（含心跳）都刷新 lastEventAt，看门狗据此判断连接是否还活着
+  let next: ChatState = event.seq == null
+    ? { ...state, lastEventAt: now }
+    : { ...state, lastSeq: event.seq, lastEventAt: now }
   switch (event.type) {
     case 'sse_open':
       if (next.run.status === 'connecting') {
@@ -276,6 +304,18 @@ export function reduceChatEvent(state: ChatState, event: ChatEvent, now: number)
       return acceptRun(next, 'thinking', event.content || '正在连接 MCP 服务', now)
     case 'mcp_ready':
       return acceptRun(next, 'thinking', event.content || 'MCP 工具已就绪', now, { toolCount: event.tool_count })
+    case 'mcp_degraded': {
+      // 部分 MCP 启动失败：回合早期就把「哪些工具不可用」亮给用户，不等到终帧
+      const running = acceptRun(next, 'thinking', event.content || '部分 MCP 服务不可用', now)
+      if (!isActiveRun(running.run)) return running
+      const names = (event.failed || []).join(', ')
+      const notice = '⚠ 部分工具不可用: ' + (names || event.content || '未知服务')
+      const meta = running.run.meta
+      return {
+        ...running,
+        run: { ...running.run, meta: { ...meta, notices: [...(meta.notices || []), notice] } },
+      }
+    }
     case 'prompt_ready':
       return acceptRun(next, 'thinking', event.content || '上下文已准备', now)
     case 'loop_start':
@@ -370,14 +410,34 @@ export function reduceChatEvent(state: ChatState, event: ChatEvent, now: number)
       return updateRunMeta(next, { step: event.steps })
     case 'final':
       return patchLastMessage(next, (message) => ({ ...message, streaming: false, text: message.text || event.text || '' }))
-    case 'done':
-      return finishRun(patchLastMessage(next, (message) => ({ ...message, streaming: false })), 'ok', now)
+    case 'done': {
+      const closed = patchLastMessage(next, (message) => ({ ...message, streaming: false }))
+      // 终帧「验尸」信息：降级 / 熔断名单变成回合汇总里的 ⚠ 警示行
+      const warnings: string[] = []
+      if (event.degraded?.length) warnings.push('⚠ 服务降级: ' + event.degraded.join(', '))
+      if (event.circuit_open?.length) warnings.push('⚠ 熔断: ' + event.circuit_open.join(', '))
+      const reason = event.reason || (event.cancelled ? 'cancelled' : 'ok')
+      if (reason === 'cancelled') {
+        // 保持与本地停止一致的呈现（err 底色 + 「已停止」+ cancelled 终态）
+        return finishRun(closed, 'err', now, '已停止', 'cancelled', { warnings })
+      }
+      if (reason === 'deadline') {
+        return finishRun(closed, 'err', now, '本轮超时被终止', 'error', { warnings, retryable: true })
+      }
+      if (reason === 'error') {
+        // 正常路径 error 事件先到并已收尾；这里兜底孤立的 error 终帧
+        return finishRun(closed, 'err', now, '本轮出错结束', 'error', { warnings, retryable: true })
+      }
+      return finishRun(closed, 'ok', now, undefined, 'done', { warnings })
+    }
     case 'error':
       return finishRun(
         patchLastMessage(next, (message) => ({ ...message, streaming: false, text: '出错：' + (event.message || '') })),
         'err',
         now,
         event.message,
+        'error',
+        { retryable: true },
       )
     case 'status': {
       if (event.state === 'idle') return next

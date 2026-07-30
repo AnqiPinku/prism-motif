@@ -3,12 +3,12 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import {
-  getJSON, postJSON, streamChat, respondPermission, uploadAudio, inTauri,
+  getJSON, postJSON, streamChat, respondPermission, uploadAudio, inTauri, cancelChatTurn,
   type State, type ReaperStatus, type ChatEvent,
 } from './api'
 import {
   buildMetrics, cancelChat, createChatState, decidePermission, failChat, isActiveRun,
-  reduceChatEvent, replaceConversation, startChat,
+  reduceChatEvent, replaceConversation, startChat, watchdogState,
   type ChatState, type Chip, type Item, type Msg, type ProcessingPhase,
   type RunMeta, type RunSummary, type RunTone, type RunTool,
 } from './chatReducer'
@@ -79,6 +79,7 @@ export default function App() {
   const [onboarding, setOnboarding] = useState(false)
   const abort = useRef<AbortController | null>(null)
   const msgsRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLTextAreaElement>(null)
 
   // 聊天附音频：+ 号选文件 → 传给 gateway 落盘 → 显示为附件胶囊，路径发送时才拼进消息
   const fileRef = useRef<HTMLInputElement>(null)
@@ -170,6 +171,16 @@ export default function App() {
     return () => window.clearInterval(id)
   }, [runActive])
 
+  // 看门狗：processingNow 每秒走一次，据「最近事件距今多久」推导连接状态
+  const watchdog = watchdogState(processingNow, chat.lastEventAt, runActive)
+  const watchdogIdleSec = chat.lastEventAt ? Math.max(0, Math.floor((processingNow - chat.lastEventAt) / 1000)) : 0
+  useEffect(() => {
+    if (watchdog !== 'lost') return
+    // 45s 无任何事件（心跳每 5s 一发）= 连接死了：断本地流 + 回滚成终态错误，留重试入口
+    abort.current?.abort()
+    applyChat(failChat(chatRef.current, '连接丢失', Date.now(), '请求失败：', true))
+  }, [watchdog, applyChat])
+
   const onEvent = (event: ChatEvent) => {
     const now = Date.now()
     const next = reduceChatEvent(chatRef.current, event, now)
@@ -206,6 +217,26 @@ export default function App() {
       abort.current = null
       loadState()
     }
+  }
+
+  // 停止要有牙齿：本地 abort 立即释放 UI，同时火后不理地请服务端取消（失败不管，
+  // 本地断开已经保证界面可用；线程号还没建立时服务端也无从取消，跳过）
+  const stop = () => {
+    abort.current?.abort()
+    const id = chatRef.current.threadId
+    if (id) cancelChatTurn(id).catch(() => {})
+  }
+
+  // 重试：把上一轮目标文本回填输入框（[音频文件: …] 行拆回附件胶囊），聚焦但不自动发送
+  // —— 半途失败的回合可能已经写入工程，重发与否由用户决定
+  const retryLast = () => {
+    const goal = chatRef.current.lastGoal
+    if (!goal) return
+    const lines = goal.split('\n')
+    const files = lines.map((l) => l.match(AUD_LINE)?.[1]).filter((p): p is string => !!p)
+    setInput(lines.filter((l) => !AUD_LINE.test(l)).join('\n'))
+    setAtts(files.map((p) => ({ name: p.split(/[\\/]/).pop() || p, path: p })))
+    requestAnimationFrame(() => inputRef.current?.focus())
   }
 
   const decide = (id: string, allow: boolean) => {
@@ -612,6 +643,7 @@ export default function App() {
       <RecordPanel disabled={uploading || sending}
         onDone={(name, path) => setAtts((a) => [...a, { name, path }])} />
       <textarea
+        ref={inputRef}
         name="message"
         aria-label="消息内容"
         rows={1} value={input} placeholder="描述你的音乐想法，交给 Prism…"
@@ -621,7 +653,7 @@ export default function App() {
       />
       <button className="fab" aria-label={sending ? '停止' : '发送'}
         disabled={!sending && !input.trim() && atts.length === 0}
-        onClick={() => (sending ? abort.current?.abort() : send())}>
+        onClick={() => (sending ? stop() : send())}>
         <I n={sending ? 'stop' : 'arrow_upward'} />
       </button>
       </div>
@@ -789,6 +821,17 @@ export default function App() {
                     <div key={i} className="a">
                       <div className="abody">
                         {!isCurrent && runs.map((run, j) => <RunSummaryLine key={j} run={run} threadId={threadId} />)}
+                        {!isCurrent && i === msgs.length - 1 && !!chat.retryable && run.status === 'error' && !!chat.lastGoal && (
+                          <button className="retrybtn" onClick={retryLast}>
+                            <I n="refresh" s={16} />重试
+                          </button>
+                        )}
+                        {isCurrent && watchdog === 'degraded' && (
+                          // 看门狗黄条：15s 没任何事件（心跳也停了）就提示连接不稳；停止按钮仍在输入框可用
+                          <div className="conn-warn" role="status">
+                            <I n="wifi_off" s={15} />连接不稳，已 {watchdogIdleSec}s 无响应
+                          </div>
+                        )}
                         {isCurrent && currentRun && (
                           <RunPanel
                             phase={currentRun.phase}
@@ -1034,6 +1077,10 @@ function RunPanel({
       </summary>
 
       <div className="run-body">
+        {/* 回合中途的降级提醒（mcp_degraded）：让用户尽早知道哪些工具这轮用不上 */}
+        {meta.notices?.map((notice, i) => (
+          <div className="run-notice" key={i}>{notice}</div>
+        ))}
         {metricChips.length > 0 && (
           <div className="run-meta">
             {metricChips.map((m) => (
@@ -1079,7 +1126,7 @@ function RunSummaryLine({ run, threadId }: { run: RunSummary; threadId?: string 
   }
   const failedTools = run.tools.filter((t) => t.tone === 'err').length
   const ok = run.status === 'ok'
-  const hasDetails = toolCount > 0 || !!run.reason
+  const hasDetails = toolCount > 0 || !!run.reason || !!run.warnings?.length
   return (
     <details className={`run-summary ${run.status}`}>
       <summary>
@@ -1095,6 +1142,8 @@ function RunSummaryLine({ run, threadId }: { run: RunSummary; threadId?: string 
       {hasDetails && (
         <div className="run-summary-body">
           {run.reason && <div className="run-summary-reason">{run.reason}</div>}
+          {/* 终帧带回的降级 / 熔断名单 */}
+          {run.warnings?.map((w, i) => <div className="run-summary-warn" key={i}>{w}</div>)}
           {run.tools.map((tool) => (
             // 原始参数 / 原始输出都收在折叠区里，卡片头只露动作文案 + 徽标
             (tool.detail || tool.args) ? (

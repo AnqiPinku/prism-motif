@@ -31,6 +31,7 @@ export type ChatEvent = SseEnvelope & (
   | { type: 'turn_start'; provider?: string; model?: string; workspace?: string; phase?: string; content?: string }
   | { type: 'mcp_start'; server_count?: number; content?: string }
   | { type: 'mcp_ready'; server_count?: number; tool_count?: number; content?: string }
+  | { type: 'mcp_degraded'; failed?: string[]; content?: string }
   | { type: 'prompt_ready'; prior_messages?: number; sent_messages?: number; summary?: boolean; content?: string }
   | { type: 'loop_start'; max_steps?: number; tool_count?: number }
   | { type: 'model_start'; step?: number; message_count?: number; tool_count?: number }
@@ -53,7 +54,7 @@ export type ChatEvent = SseEnvelope & (
   | { type: 'loop_done'; steps?: number; duration_ms?: number; reason?: string }
   | { type: 'turn_saved'; thread_id?: string; messages?: number; content?: string }
   | { type: 'error'; message: string }
-  | { type: 'done'; cancelled?: boolean }
+  | { type: 'done'; cancelled?: boolean; reason?: 'ok' | 'cancelled' | 'disconnected' | 'deadline' | 'error'; degraded?: string[]; circuit_open?: string[] }
 )
 
 export { inTauri }
@@ -136,6 +137,11 @@ export async function streamChat(
 
 export const respondPermission = (id: string, allow: boolean) =>
   postJSON('/api/permission', { id, allow })
+
+// 让「停止」有牙齿：本地 abort 只断前端，这里再请服务端取消回合（约 0.5s 内生效）。
+// 火后不理：请求失败也不影响本地立即释放 UI。
+export const cancelChatTurn = (threadId: string) =>
+  postJSON('/api/chat/cancel', { thread_id: threadId })
 
 // 在系统默认浏览器打开一个外部链接（Tauri 壳里 <a target="_blank"> 不生效）。
 // 交给 gateway 处理：Python webbrowser.open + hostname 白名单。

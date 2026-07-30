@@ -243,6 +243,22 @@ details.run-row>.tooldetail{margin:2px 6px 6px}
 .run-summary-note{font-size:12.5px;color:var(--muted)}
 .run-summary-body{padding:0 0 10px 24px;display:flex;flex-direction:column;gap:4px}
 .run-summary-reason{font-size:12.5px;color:var(--muted);padding:4px 6px}
+/* 终帧带回的降级 / 熔断警示行（回合汇总内） */
+.run-summary-warn{font-size:12.5px;color:var(--amber);padding:2px 6px}
+/* 回合中途的降级提醒行（运行面板内，mcp_degraded） */
+.run-notice{font-size:12.5px;color:var(--amber);padding:2px 0}
+/* 看门狗黄条：贴在运行面板上方的细条，amber 侧边 + statusmenu 同款圆角/投影，尽量不跳版 */
+.conn-warn{width:min(640px,100%);display:flex;align-items:center;gap:7px;margin:0 0 8px;padding:5px 12px;
+  font-size:12.5px;color:var(--on-surface-var);background:var(--surface);
+  border:1px solid var(--outline-var);border-left:3px solid var(--amber);border-radius:12px;
+  box-shadow:0 4px 14px rgba(60,40,120,.10)}
+.conn-warn .material-symbols-outlined{color:var(--amber)}
+/* 错误卡下的重试入口：回填上一轮目标，不自动发送 */
+.retrybtn{align-self:flex-start;display:inline-flex;align-items:center;gap:5px;margin:0 0 12px;padding:5px 13px;
+  font-size:12.5px;color:var(--on-surface-var);background:var(--surface-1);
+  border:1px solid var(--outline-var);border-radius:14px;cursor:pointer;transition:background .12s}
+.retrybtn:hover{background:var(--surface-2)}
+.retrybtn .material-symbols-outlined{color:var(--primary)}
 .run-panel+.toolbar{margin-top:0;margin-bottom:10px}
 .run-summary+.toolbar{margin-top:0;margin-bottom:10px}
 .toolbar+.atext{margin-top:10px}
