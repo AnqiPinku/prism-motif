@@ -12,6 +12,7 @@ import {
   type ChatState, type Chip, type Item, type Msg, type ProcessingPhase,
   type RunMeta, type RunSummary, type RunTone, type RunTool,
 } from './chatReducer'
+import { captionForTool, coerceArgs, formatToolArgs, resultBadge } from './toolCaptions.ts'
 
 // 历史标题里可能截进附件行（旧存档），显示前清掉
 const cleanTitle = (s: string) => s.replace(/\[音频文件:[^\]]*\]?/g, '').trim()
@@ -213,7 +214,7 @@ export default function App() {
   }
 
   const openThread = async (id: string) => {
-    type Raw = { role: string; content?: string | null; tool_call_id?: string; tool_calls?: { id?: string; name: string }[] }
+    type Raw = { role: string; content?: string | null; tool_call_id?: string; tool_calls?: { id?: string; name: string; arguments?: unknown }[] }
     const data = await getJSON<{ messages: Raw[] }>('/api/threads/' + encodeURIComponent(id))
     // 静默切到该对话所属项目（记忆按工作区隔离，续聊要用对的域）
     const t = (state?.threads || []).find((x) => x.id === id)
@@ -242,7 +243,14 @@ export default function App() {
         if (!cur) { cur = { role: 'assistant', text: '', items: [] }; out.push(cur) }
         for (const tc of m.tool_calls || []) {
           const id = tc.id || tc.name
-          const tool: RunTool = { id, name: tc.name, tone: 'ok' }
+          // 存档带 arguments，重建时同样翻成中文动作文案 + 折叠区参数
+          const tool: RunTool = {
+            id,
+            name: tc.name,
+            tone: 'ok',
+            caption: captionForTool(tc.name, coerceArgs(tc.arguments)),
+            args: formatToolArgs(tc.arguments),
+          }
           byCallId.set(id, tool)
           curTools.push(tool)
         }
@@ -255,6 +263,7 @@ export default function App() {
         tool.contentChars = content.length
         // 存档没记 is_error，按常见错误开头近似判断
         if (/^(analysis error|error|traceback|用户拒绝)/i.test(content)) tool.tone = 'err'
+        else tool.badge = resultBadge(tool.name, content) ?? undefined
         const metrics = tool.tone === 'ok' ? buildMetrics(tool.name, content) : null
         if (metrics) cur.items.push({ kind: 'metrics', ...metrics })
       }
@@ -942,11 +951,36 @@ export default function App() {
   )
 }
 
+// 状态卡图标约定：完成 = 对勾、失败 = 叉（红色由 .run-row.err 的 CSS 提供）、运行中 = spinner
 function runToneIcon(tone: RunTone) {
-  if (tone === 'ok') return 'check_circle'
-  if (tone === 'err') return 'error'
+  if (tone === 'ok') return 'check'
+  if (tone === 'err') return 'close'
   if (tone === 'info') return 'info'
   return 'progress_activity'
+}
+
+// 单条工具状态卡的行头：状态图标 + 中文动作文案 + 结果徽标 + 耗时/字符数。
+// RunPanel（实时）和 RunSummaryLine（回合汇总/存档）共用，保证两处观感一致。
+function ToolRowHead({ tool }: { tool: RunTool }) {
+  return (
+    <>
+      <span className="run-dot">
+        {tool.tone === 'run'
+          ? <span className="spinning"><I n="progress_activity" s={15} /></span>
+          : <I n={runToneIcon(tool.tone)} s={15} />}
+      </span>
+      <span className="run-row-main">
+        <span className="run-row-label">{tool.caption || captionForTool(tool.name)}</span>
+        {tool.badge && <span className="run-row-badge">{tool.badge}</span>}
+        {(tool.durationMs != null || tool.contentChars != null) && (
+          <span className="run-row-detail">
+            {tool.durationMs != null ? msLabel(tool.durationMs) : ''}
+            {tool.contentChars != null ? `${tool.durationMs != null ? ' · ' : ''}${tool.contentChars} 字符` : ''}
+          </span>
+        )}
+      </span>
+    </>
+  )
 }
 
 function phaseLabel(phase: ProcessingPhase) {
@@ -981,7 +1015,11 @@ function RunPanel({
       title: meta.promptTokens && meta.contextWindow ? `${meta.promptTokens} / ${meta.contextWindow} tokens` : undefined,
     })
 
-  const headline = activeTools.length ? `${currentWork} · ${activeTools[0].name}` : currentWork
+  // 头行补上当前工具的动作文案；work 里已含同一句时不重复
+  const activeCaption = activeTools.length ? (activeTools[0].caption || activeTools[0].name) : ''
+  const headline = activeCaption && !currentWork.includes(activeCaption)
+    ? `${currentWork} · ${activeCaption}`
+    : currentWork
   return (
     <details className={`run-panel active ${phase}`} open={open} onToggle={(e) => setOpen(e.currentTarget.open)}>
       <summary className="run-head" role="status" aria-live="polite">
@@ -1020,16 +1058,7 @@ function RunPanel({
             </div>
             {tools.slice(-4).map((tool) => (
               <div className={`run-row ${tool.tone}`} key={tool.id}>
-                <span className="run-dot"><I n={runToneIcon(tool.tone)} s={15} /></span>
-                <span className="run-row-main">
-                  <span className="run-row-label">{tool.name}</span>
-                  {(tool.contentChars != null || tool.durationMs != null) && (
-                    <span className="run-row-detail">
-                      {tool.durationMs != null ? msLabel(tool.durationMs) : ''}
-                      {tool.contentChars != null ? `${tool.durationMs != null ? ' · ' : ''}${tool.contentChars} 字符` : ''}
-                    </span>
-                  )}
-                </span>
+                <ToolRowHead tool={tool} />
               </div>
             ))}
           </div>
@@ -1072,46 +1101,40 @@ function RunSummaryLine({ run, threadId }: { run: RunSummary; threadId?: string 
         <div className="run-summary-body">
           {run.reason && <div className="run-summary-reason">{run.reason}</div>}
           {run.tools.map((tool) => (
-            tool.detail ? (
+            // 原始参数 / 原始输出都收在折叠区里，卡片头只露动作文案 + 徽标
+            (tool.detail || tool.args) ? (
               <details className={`run-row hasdetail ${tool.tone}`} key={tool.id}>
                 <summary>
-                  <span className="run-dot"><I n={runToneIcon(tool.tone)} s={15} /></span>
-                  <span className="run-row-main">
-                    <span className="run-row-label">{tool.name}</span>
-                    {(tool.durationMs != null || tool.contentChars != null) && (
-                      <span className="run-row-detail">
-                        {tool.durationMs != null ? msLabel(tool.durationMs) : ''}
-                        {tool.contentChars != null ? `${tool.durationMs != null ? ' · ' : ''}${tool.contentChars} 字符` : ''}
-                      </span>
-                    )}
-                  </span>
+                  <ToolRowHead tool={tool} />
                   <I n="expand_more" s={15} />
                 </summary>
-                {fullDetails[tool.id] ? (
-                  <pre className="tooldetail">{fullDetails[tool.id]}</pre>
-                ) : (
+                {tool.args && (
                   <>
-                    <pre className="tooldetail">{tool.detail.length > 700 ? tool.detail.slice(0, 700) + ' …' : tool.detail}</pre>
-                    {tool.truncated && threadId && (
-                      <button className="tool-loadfull" onClick={() => loadFull(tool.id)} disabled={loading === tool.id}>
-                        {loading === tool.id ? '加载中…' : `查看完整（还有 ${(tool.originalChars || 0) - (tool.detail?.length || 0)} 字符）`}
-                      </button>
+                    <div className="run-raw-label">参数</div>
+                    <pre className="tooldetail">{tool.args.length > 700 ? tool.args.slice(0, 700) + ' …' : tool.args}</pre>
+                  </>
+                )}
+                {tool.detail && (
+                  <>
+                    {tool.args && <div className="run-raw-label">输出</div>}
+                    {fullDetails[tool.id] ? (
+                      <pre className="tooldetail">{fullDetails[tool.id]}</pre>
+                    ) : (
+                      <>
+                        <pre className="tooldetail">{tool.detail.length > 700 ? tool.detail.slice(0, 700) + ' …' : tool.detail}</pre>
+                        {tool.truncated && threadId && (
+                          <button className="tool-loadfull" onClick={() => loadFull(tool.id)} disabled={loading === tool.id}>
+                            {loading === tool.id ? '加载中…' : `查看完整（还有 ${(tool.originalChars || 0) - (tool.detail?.length || 0)} 字符）`}
+                          </button>
+                        )}
+                      </>
                     )}
                   </>
                 )}
               </details>
             ) : (
               <div className={`run-row ${tool.tone}`} key={tool.id}>
-                <span className="run-dot"><I n={runToneIcon(tool.tone)} s={15} /></span>
-                <span className="run-row-main">
-                  <span className="run-row-label">{tool.name}</span>
-                  {(tool.durationMs != null || tool.contentChars != null) && (
-                    <span className="run-row-detail">
-                      {tool.durationMs != null ? msLabel(tool.durationMs) : ''}
-                      {tool.contentChars != null ? `${tool.durationMs != null ? ' · ' : ''}${tool.contentChars} 字符` : ''}
-                    </span>
-                  )}
-                </span>
+                <ToolRowHead tool={tool} />
               </div>
             )
           ))}

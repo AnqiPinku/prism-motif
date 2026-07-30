@@ -213,7 +213,8 @@ body.nav-resizing{cursor:col-resize;user-select:none}
 .run-row.ok,.run-row.info{background:transparent}
 .run-row.err{background:#fff1f0}
 .run-dot{width:22px;height:22px;border-radius:50%;background:var(--surface-1);display:flex;align-items:center;justify-content:center;flex-shrink:0}
-.run-row.run .run-dot .material-symbols-outlined{color:var(--primary);animation:spin 1s linear infinite}
+/* 旋转由标记里的 .spinning 包一层提供；这里只管颜色，避免双重动画叠加转速 */
+.run-row.run .run-dot .material-symbols-outlined{color:var(--primary)}
 .run-row.ok .run-dot .material-symbols-outlined{color:var(--green)}
 .run-row.err .run-dot .material-symbols-outlined{color:var(--red)}
 .run-row.info .run-dot .material-symbols-outlined{color:var(--muted)}
@@ -230,6 +231,10 @@ details.run-row>.tooldetail{margin:2px 6px 6px}
 .run-row-main{min-width:0;display:flex;align-items:center;gap:8px;flex:1}
 .run-row-label{font-size:12.5px;color:var(--on-surface);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .run-row-detail{font-size:11.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* 结果徽标：从工具结果里提取的一条完成事实（如「已写入 ×8」） */
+.run-row-badge{flex-shrink:0;font-size:11px;line-height:1;color:var(--on-surface-var);background:var(--surface-2);border-radius:999px;padding:3px 8px;white-space:nowrap}
+/* 折叠区里「参数」「输出」小节标 */
+.run-raw-label{font-size:11px;color:var(--muted);margin:4px 6px 2px}
 .run-duration{font-size:11.5px;color:var(--muted);flex-shrink:0}
 .run-summary>summary{list-style:none;display:inline-flex;align-items:center;gap:8px;min-height:36px;padding:0 0 8px;cursor:pointer;user-select:none;color:var(--muted);font-size:13.5px}
 .run-summary>summary::-webkit-details-marker{display:none}

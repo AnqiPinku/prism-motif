@@ -123,6 +123,8 @@ Read `references/production-semantics.md` for mappings from phrases like "鼓太
 Chat output between tool calls is a status line, not a broadcast. Verbose
 re-narration buries the result and erodes trust.
 
+- Between tool calls, emit at most one short status line in the present
+  tense ("Transcribing the recording."), never an analysis paragraph.
 - State each analysis or measurement exactly once. After later tool calls,
   report only the delta, the decision, and the next action. Never restate an
   earlier table or a full analysis.
@@ -135,6 +137,19 @@ re-narration buries the result and erodes trust.
 - When naming MIDI pitches in prose, use the standard mapping with C4 = 60
   (58 = A#3/Bb3, 59 = B3, 61 = C#4/Db4, 63 = D#4/Eb4). Check every note name
   against its pitch number before writing it.
+
+When the work completes, close with a **delta receipt**: a compact list,
+one line per action actually performed, each line naming the target, the
+change (old → new where meaningful), and the read-back evidence number.
+Example shape:
+
+- Melody 2: wrote 14 notes (beats 0-9.6), item extended to 4 bars
+- Removed 2 breath notes (D3/F#3, velocity 64-66)
+- Verified by read-back: 14 notes in item
+
+The receipt lists only deltas — never restate unchanged project state, and
+nothing may appear as done unless a tool result confirmed it. After the
+receipt, one short question or next-step offer, nothing else.
 
 ## Confirmation Policy
 

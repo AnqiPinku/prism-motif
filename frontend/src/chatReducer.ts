@@ -1,4 +1,5 @@
 import type { ChatEvent } from './api'
+import { captionForTool, coerceArgs, formatToolArgs, resultBadge } from './toolCaptions.ts'
 
 export type Chip = { kind: 'chip'; tone: 'ok' | 'err' | 'run'; label: string; detail?: string }
 export type ProcessingPhase = 'connecting' | 'thinking' | 'generating' | 'tool' | 'retry'
@@ -7,6 +8,9 @@ export type RunTool = {
   id: string
   name: string
   tone: RunTone
+  caption?: string          // 中文动作文案（captionForTool 产物），渲染时优先于原始工具名
+  badge?: string            // 结果徽标（resultBadge 产物），如「已写入 ×8」
+  args?: string             // 原始参数 JSON 文本，折叠区里展示
   durationMs?: number
   contentChars?: number
   detail?: string
@@ -296,8 +300,16 @@ export function reduceChatEvent(state: ChatState, event: ChatEvent, now: number)
       return patchLastMessage(next, (message) => ({ ...message, streaming: false }))
     case 'tool_call':
     case 'tool_start': {
-      const running = acceptRun(next, 'tool', `正在执行 ${event.name}`, now)
-      return upsertRunTool(running, { id: event.id || event.name, name: event.name, tone: 'run' })
+      // 状态卡约定：调用一到就把工具名 + 参数翻成中文动作文案，原始参数收进折叠区
+      const caption = captionForTool(event.name, coerceArgs(event.arguments))
+      const running = acceptRun(next, 'tool', `正在执行 ${caption}`, now)
+      return upsertRunTool(running, {
+        id: event.id || event.name,
+        name: event.name,
+        tone: 'run',
+        caption,
+        args: formatToolArgs(event.arguments),
+      })
     }
     case 'tool_result': {
       let result = acceptRun(next, 'thinking', '等待模型继续', now)
@@ -306,6 +318,8 @@ export function reduceChatEvent(state: ChatState, event: ChatEvent, now: number)
           id: event.id || event.name,
           name: event.name,
           tone: event.is_error ? 'err' : 'ok',
+          // 成功结果里能便宜提取的完成事实（写入数 / 音符数 / 已延长 item…）做徽标
+          badge: (event.is_error ? null : resultBadge(event.name, event.content)) ?? undefined,
           durationMs: event.duration_ms,
           contentChars: event.content_chars,
           detail: (event.content || '').trim(),
