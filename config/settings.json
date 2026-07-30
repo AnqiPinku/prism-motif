@@ -2,6 +2,9 @@
   "max_steps": 64,
   "request_timeout_s": 120,
   "tool_timeout_s": 120,
+  "tool_timeout_overrides": {
+    "transcribe_melody": 300
+  },
   "retry": {
     "max_attempts": 3,
     "base_delay_s": 1.0

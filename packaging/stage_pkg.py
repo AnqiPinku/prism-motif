@@ -71,7 +71,8 @@ def stage_config():
     settings = _load(ROOT / "config" / "settings.json")
     settings["workspace"] = "default"                  # 用户第一次跑是 default
     settings.pop("archived_workspaces", None)           # 你的归档项目名不带走
-    # base_prompt / max_steps / retry / context / tool_timeout_s 全都保留(产品默认值)
+    # base_prompt / max_steps / retry / context / tool_timeout_s / tool_timeout_overrides
+    # 全都保留(产品默认值)
     _dump(dst_cfg / "settings.json", settings)
 
     # modes.json 里 current 重置成 "" (默认无 mode)

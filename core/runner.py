@@ -40,6 +40,21 @@ def _settings():
     return _load_json(CONFIG / "settings.json", {"max_steps": 64, "request_timeout_s": 120})
 
 
+DEFAULT_TOOL_TIMEOUT_OVERRIDES = {"transcribe_melody": 300}   # 长任务工具的默认超时覆盖（秒）
+
+
+def _read_only_tools():
+    """tool_policy.json 里 risk 解析为 read 的工具集合——只读工具重启 server 后可安全重放。
+    条目有两种形态：纯字符串风险 与 {"risk": ...}；条件/批量等复杂条目一律不算只读。"""
+    policy = _load_json(CONFIG / "tool_policy.json", {})
+    names = set()
+    for name, entry in (policy.get("tools") or {}).items():
+        risk = entry.get("risk") if isinstance(entry, dict) else entry
+        if risk == "read":
+            names.add(name)
+    return names
+
+
 def build_reasoner(provider=None):
     """按 providers.json 造模型，返回 (reasoner, provider_name)。"""
     cfg = _load_json(CONFIG / "providers.json", {"default": "deepseek", "providers": {}})
@@ -210,7 +225,11 @@ def run_turn(goal, provider=None, on_event=None, thread_id=None, permission=None
 
     mcp_cfg = _load_json(CONFIG / "mcp_servers.json", {"servers": []})
     enabled = [s for s in mcp_cfg.get("servers", []) if s.get("enabled", True)]
-    toolhub = ToolHub(enabled, tool_timeout=_settings().get("tool_timeout_s", 60))
+    read_set = _read_only_tools()          # 只读工具才允许故障重启后重放（写类重放会重复副作用）
+    toolhub = ToolHub(
+        enabled, tool_timeout=settings.get("tool_timeout_s", 60),
+        per_tool_timeouts=settings.get("tool_timeout_overrides") or DEFAULT_TOOL_TIMEOUT_OVERRIDES,
+        retryable=lambda name: name in read_set)
     _notify({"type": "mcp_start", "server_count": len(enabled),
              "content": "正在连接 MCP 服务"})
 
@@ -218,6 +237,13 @@ def run_turn(goal, provider=None, on_event=None, thread_id=None, permission=None
         # start() 之后的任何异常（含取消信号在 emit 里抛出）都必须走到 finally 的
         # toolhub.close()，否则 MCP 子进程成孤儿——取消恰落在 MCP 启动窗口时必现。
         toolhub.start()
+        degraded_note = ""
+        if toolhub.failed:                 # 部分 server 启动失败 → 降级运行，浮出事件 + 告知模型
+            detail = "、".join("%s（%s）" % f for f in toolhub.failed)
+            degraded_note = "【工具降级】以下 MCP 服务启动失败，其工具本轮不可用：%s" % detail
+            _notify({"type": "mcp_degraded",
+                     "failed": [name for name, _ in toolhub.failed],
+                     "content": degraded_note})
         _notify({"type": "mcp_ready", "server_count": len(enabled),
                  "tool_count": len(toolhub.specs()), "content": "MCP 工具已就绪"})
 
@@ -293,6 +319,8 @@ def run_turn(goal, provider=None, on_event=None, thread_id=None, permission=None
 
         # 系统提示每轮重建；把摘要折进 system（保持单条 system、最大兼容）。为空则不插入 system。
         head_text = system_prompt or ""
+        if degraded_note:                  # 降级说明折进 system，模型才知道哪些工具缺席
+            head_text = (head_text + "\n\n" if head_text else "") + degraded_note
         if use_summary and use_summary.get("text"):
             head_text = (head_text + "\n\n" if head_text else "") + "【早前对话摘要】\n" + use_summary["text"]
         head = [Message(role="system", content=head_text)] if head_text else []
