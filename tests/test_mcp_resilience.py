@@ -2,7 +2,9 @@
 ToolHub 降级启动 / 一次性重启 / 只读重试 / 熔断。全离线，假 server 在 tests/fake_mcp/。"""
 
 import json
+import os
 import shutil
+import subprocess
 import sys
 import tempfile
 import time
@@ -26,6 +28,29 @@ class McpClientResilienceTests(unittest.TestCase):
         c = MCPClient(sys.executable, [str(FAKES / script), *argv], **kw)
         self.addCleanup(c.close)
         return c
+
+    @unittest.skipUnless(os.name == "nt", "进程树终杀是 Windows taskkill 路径")
+    def test_close_kills_grandchildren(self):
+        """杀 server 必须连带其孙进程：防 ROSVOT 类子任务成孤儿烧 CPU。"""
+        log = self.tmp / "spawn.log"
+        c = self.client("spawner.py", "--log", str(log), timeout=10)
+        c.start()
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline and not log.exists():
+            time.sleep(0.05)
+        gpid = int(log.read_text(encoding="utf-8").strip())
+        c.close()
+        deadline = time.monotonic() + 8
+        alive = True
+        while time.monotonic() < deadline:
+            q = subprocess.run(
+                ["tasklist", "/FI", f"PID eq {gpid}", "/NH"],
+                capture_output=True, text=True)
+            alive = str(gpid) in q.stdout
+            if not alive:
+                break
+            time.sleep(0.3)
+        self.assertFalse(alive, f"孙进程 {gpid} 在 close 后仍存活")
 
     def test_dead_child_detected_fast(self):
         """握手刚完就死的子进程：poll 探活秒判，远快于 rpc 超时。"""

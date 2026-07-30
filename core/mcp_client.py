@@ -143,6 +143,17 @@ class MCPClient:
         except Exception:  # noqa: BLE001
             pass
         if proc.poll() is None:
+            if os.name == "nt":
+                # Windows 的 TerminateProcess 不杀子孙：感知服务被杀时 ROSVOT 之类的
+                # 孙进程会成孤儿继续烧 CPU。taskkill /T 整树终杀。
+                try:
+                    subprocess.run(
+                        ["taskkill", "/T", "/F", "/PID", str(proc.pid)],
+                        capture_output=True, timeout=5,
+                        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+                except Exception:  # noqa: BLE001
+                    pass
+        if proc.poll() is None:
             try:
                 proc.terminate()
                 proc.wait(timeout=2)
