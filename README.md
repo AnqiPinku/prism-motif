@@ -2,7 +2,7 @@
 
 An offline-friendly desktop AI music-agent that plays with your REAPER project — composes, arranges, mixes, and listens back. Built as a native Windows app on top of Python + Tauri + React, driving REAPER through a Lua bridge and analyzing audio with a permissive DSP stack.
 
-Runs 100% on your machine (no cloud lock-in): a text LLM is the brain, deterministic MIR + Google Gemini's audio model are the ears, and REAPER is the hands.
+Local-first, not cloud-locked: a text LLM is the brain, deterministic MIR + an audio model are the ears, and REAPER is the hands. Your projects and API keys stay on your machine; the two model calls go to whichever endpoint you configure.
 
 ---
 
@@ -30,7 +30,7 @@ The end state of a full production is an editable, multi-track REAPER project yo
 - **Arrangement** — picks a form template (pop / lo-fi / EDM / ambient / ballad), marks sections in the timeline, discovers what instrument plugins you actually have installed (`list_installed_fx`), designs an energy curve.
 - **Mix** — measure-then-adjust workflow: renders → `analyze_audio` (LUFS + tempo + key + spectral bands) → `listen_subjective` (Gemini's mood/harshness/muddy verdict) → picks fixes → re-measures. Targets platform LUFS (Spotify -14, EDM -9, classical -18) and never guesses without numbers.
 
-**Ten mode-scoped skills.** Each mode ships with three specialist skills plus a shared `reaper-producer` persona; skills auto-toggle when you switch mode.
+**Mode-scoped skills.** A shared `reaper-producer` persona loads in full every session; nine specialist skills are indexed per mode and toggle when you switch. Today the agent sees that index, not the bodies — on-demand retrieval of skill contents is v0.3 work.
 
 **Full REAPER control** via the sibling `reaper-mcp` server + a Lua bridge auto-loaded through `__startup.lua`. Read/write MIDI in beats, render selections, add FX by name, list installed plugins, switch presets — all through a stdio JSON-RPC MCP.
 
@@ -50,7 +50,7 @@ The end state of a full production is an editable, multi-track REAPER project yo
 
 ### From an MSI (recommended for non-developers)
 
-Grab `Prism Motif_0.1.0_x64_en-US.msi` from the [Releases](../../releases) page and double-click. About 147 MB. Installs bundled CPython + a frozen perception sidecar + the app itself; API keys stay in Windows Credential Manager (OS-level).
+Grab `Prism Motif_0.1.0_x64_en-US.msi` from the [Releases](../../releases) page and double-click. About 154 MB. Installs bundled CPython + a frozen perception sidecar + the app itself; API keys stay in Windows Credential Manager (OS-level).
 
 You still need to install REAPER separately (this drives REAPER, it isn't a replacement) and reload the bridge inside REAPER when the app asks — one click in onboarding.
 
@@ -116,7 +116,7 @@ prism-motif/
 ├── gateway/            HTTP + SSE gateway (Python stdlib)
 ├── core/               ReAct loop, LLM streaming, skill loader, thread archive, keyring
 ├── config/             MCP server config, mode definitions, settings template
-├── data/skills/        10 SKILL.md files driving the three-mode workflow
+├── data/skills/        10 SKILL.md files (one loaded in full, nine indexed)
 ├── frontend/           React 19 + Vite + Tauri 2 shell
 │   └── src-tauri/      Rust shell (frameless titlebar, single-instance, gateway supervisor)
 ├── packaging/          stage_pkg.py, sanitizes what actually goes into a build
