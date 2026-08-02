@@ -22,6 +22,14 @@ The end state of a full production is an editable, multi-track REAPER project yo
 
 ---
 
+## From a hum to a finished track
+
+![From a hum to a finished track — three modes, two MCP services, one perception loop](docs/journey.svg)
+
+Training-free and multi-model: decision — any OpenAI-compatible LLM (DeepSeek `deepseek-chat` by default) · listening — Gemini 2.5 Flash · transcription — ROSVOT + RMVPE · measurement — deterministic DSP, not a model. Nothing is trained or fine-tuned; the capability comes from orchestration.
+
+---
+
 ## Features
 
 **Three teaching-style modes.** Click a chip in the title bar; the agent's system persona, skill set, and tool discipline swap to match.
@@ -30,17 +38,19 @@ The end state of a full production is an editable, multi-track REAPER project yo
 - **Arrangement** — picks a form template (pop / lo-fi / EDM / ambient / ballad), marks sections in the timeline, discovers what instrument plugins you actually have installed (`list_installed_fx`), designs an energy curve.
 - **Mix** — measure-then-adjust workflow: renders → `analyze_audio` (LUFS + tempo + key + spectral bands) → `listen_subjective` (Gemini's mood/harshness/muddy verdict) → picks fixes → re-measures. Targets platform LUFS (Spotify -14, EDM -9, classical -18) and never guesses without numbers.
 
+**Hum → editable MIDI.** Tap the mic in the chat panel, hum da-da-da, and the take lands in the conversation as a replayable clip. `transcribe_melody` turns it into editable MIDI at the project tempo, and a `pitch-correction` skill has the agent snap off-key notes to the key and scale you meant — the evaluation stance is intent-level: not "did you sing in tune" but "did we recover the melody you intended". A deeper intent-restoration layer is on the public roadmap.
+
 **Mode-scoped skills.** A shared `reaper-producer` persona loads in full every session; nine specialist skills are indexed per mode and toggle when you switch. Today the agent sees that index, not the bodies — on-demand retrieval of skill contents is v0.3 work.
 
 **Full REAPER control** via the sibling `reaper-mcp` server + a Lua bridge auto-loaded through `__startup.lua`. Read/write MIDI in beats, render selections, add FX by name, list installed plugins, switch presets — all through a stdio JSON-RPC MCP.
 
-**Deterministic audio perception** (`music-perception-mcp`, permissive DSP):
+**Audio perception & transcription** (`music-perception-mcp`):
 - `analyze_audio` — integrated LUFS, loudness range, true peak (scipy 4× oversampled), tempo, Krumhansl key, six spectral bands + centroid/rolloff.
 - `measure_loudness` — quick LUFS-only pass.
-- `transcribe_melody` — monophonic librosa pyin → beats-native MIDI notes at the DAW tempo.
+- `transcribe_melody` — hum→MIDI through a vendored ROSVOT (ACL 2024) + RMVPE pitch tracker, emitting beats-native MIDI notes at the DAW tempo; falls back to librosa pyin when the neural checkpoint is absent. Evaluated at intent level — did it recover the melody the singer *meant* — the neural path beats the pyin baseline by ~7 F1 points on real da-da-da humming (HumTrans sample).
 - `listen_subjective` — Google Gemini (or any OpenAI-compatible relay) as an audio LLM: mood, muddy/harsh/sibilant/bright scores, timestamped issues.
 
-**Hard-won reliability work under the hood.** SSE is close-delimited on HTTP/1.0 (fixes the 6-turn wedge), streaming supports real cancellation via `TurnCancelled`, delta events coalesce in a 50 ms window (long replies stop stuttering), mid-stream provider errors retry idempotently, tool_result gets truncated to 2 KB on the wire (full text fetched on demand), permissions timeout cleanly with a `permission_result` event, thread archives are atomic and thread-safe. Details in the commit history.
+**Hard-won reliability work under the hood.** SSE is close-delimited on HTTP/1.0 (fixes the 6-turn wedge), streaming supports real cancellation via `TurnCancelled`, delta events coalesce in a 50 ms window (long replies stop stuttering), mid-stream provider errors retry idempotently, tool_result gets truncated to 2 KB on the wire (full text fetched on demand), permissions timeout cleanly with a `permission_result` event, thread archives are atomic and thread-safe. Newer round: transport timeouts and cancellation aligned with the MCP spec, every turn guaranteed a terminal event (no forever-spinners), a frontend watchdog for stalled turns, dead MCP subprocesses restart once then circuit-break, and write tools are never auto-replayed — a replayed `add_midi_notes` would double your notes. Details in the commit history.
 
 **Native shell.** Frameless M3-styled titlebar, project-style sidebar with archive, rainbow-arc app icon, single-instance guard, visible startup errors instead of a 45 s hang.
 
